@@ -26,6 +26,9 @@ interface PractisePanelProps {
   sessionId: string;
   questionId: string;
   questionText: string;
+  title?: string;
+  textPlaceholder?: string;
+  audioHelp?: string;
   onAnalyzeStart: () => void;
   onAnalyzeComplete: (result: AnalyzeResponse, isDemo?: boolean) => void;
 }
@@ -34,6 +37,9 @@ export function PractisePanel({
   sessionId,
   questionId,
   questionText,
+  title = "Practise your answer",
+  textPlaceholder = "Type your interview answer here...",
+  audioHelp = "Record your spoken answer. We'll transcribe it and provide speech coaching.",
   onAnalyzeStart,
   onAnalyzeComplete,
 }: PractisePanelProps) {
@@ -137,33 +143,48 @@ export function PractisePanel({
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const supportedMimeTypes = ["audio/wav", "audio/webm;codecs=opus", "audio/webm"];
+      const mimeType = supportedMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type)
+      );
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const recordedType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: recordedType });
+        const extension = recordedType.includes("wav") ? "wav" : "webm";
+        const duration = (Date.now() - startTimeRef.current) / 1000;
         stream.getTracks().forEach((t) => t.stop());
         setLoading(true);
         onAnalyzeStart();
         setError("");
         try {
-          const stt = await transcribeAudioFile(blob);
-          const transcript = stt.transcript?.trim();
-          if (!transcript || stt.error) {
-            throw new Error(stt.message ?? "Transcription failed");
-          }
-          const result = await analyzeText({
-            question_id: questionId,
-            session_id: sessionId,
-            original_text: transcript,
-          });
+          const result = await analyzeAudio(
+            questionId,
+            sessionId,
+            blob,
+            duration,
+            `recording.${extension}`
+          );
           onAnalyzeComplete(result);
         } catch {
           try {
-            const duration = (Date.now() - startTimeRef.current) / 1000;
-            const result = await analyzeAudio(questionId, sessionId, blob, duration);
+            const stt = await transcribeAudioFile(blob);
+            const transcript = stt.transcript?.trim();
+            if (!transcript || stt.error) {
+              throw new Error(stt.message ?? "Transcription failed");
+            }
+            const result = await analyzeText({
+              question_id: questionId,
+              session_id: sessionId,
+              original_text: transcript,
+            });
             onAnalyzeComplete(result);
           } catch {
             onAnalyzeComplete(DEMO_ANALYZE_RESPONSE, true);
@@ -199,7 +220,7 @@ export function PractisePanel({
 
   return (
     <OutputCard
-      title="Practise your answer"
+      title={title}
       action={
         <Button size="sm" variant="secondary" onClick={loadDemo} disabled={loading}>
           <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
@@ -254,7 +275,7 @@ export function PractisePanel({
             placeholder={
               mode === "native"
                 ? "Write your answer in your native language…"
-                : "Type your interview answer here…"
+                : textPlaceholder
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -269,7 +290,7 @@ export function PractisePanel({
       {mode === "audio" && (
         <div className="space-y-4 py-6 text-center">
           <p className="text-sm text-muted">
-            Record your spoken answer. We&apos;ll transcribe it and provide speech coaching.
+            {audioHelp}
           </p>
           {recording ? (
             <Button variant="danger" onClick={stopRecording}>

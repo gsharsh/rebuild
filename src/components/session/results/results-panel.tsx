@@ -32,7 +32,15 @@ export function ResultsPanel({ result, isDemo, loading }: ResultsPanelProps) {
       <ScoreRow result={result} />
       <ScriptDisplay transcript={result.transcript} changes={changes} />
       <ScriptSplitView analysis={result.script_analysis} />
-      <AudioPlayer src={result.coach_audio_url} label="Play audio advice" />
+      <AudioPlayer
+        src={result.coach_audio_url}
+        label="Play audio advice"
+        unavailableMessage={
+          result.coach_audio_error ??
+          result.speech_analysis?.coach_audio_error ??
+          "Audio coaching is being generated. Try submitting again if it does not appear."
+        }
+      />
       <CoachTabs result={result} isDemo={isDemo} />
     </div>
   );

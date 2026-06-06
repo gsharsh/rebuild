@@ -56,6 +56,25 @@ export function CoachTabs({ result, isDemo }: CoachTabsProps) {
                 <p className="text-xs text-muted">Energy</p>
                 <p className="font-medium">{speech?.energy_delivery_score ?? "—"}</p>
               </div>
+              {speech?.filler_count != null && (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-muted">Fillers</p>
+                  <p className="font-medium">
+                    {speech.filler_count}
+                    {speech.filler_per_minute != null
+                      ? ` / ${speech.filler_per_minute}/min`
+                      : ""}
+                  </p>
+                </div>
+              )}
+              {speech?.pace_label && (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-muted">Pace label</p>
+                  <p className="font-medium capitalize">
+                    {speech.pace_label.replaceAll("_", " ")}
+                  </p>
+                </div>
+              )}
             </div>
             {speech?.hesitation_markers_detected?.length > 0 && (
               <div>
@@ -65,21 +84,80 @@ export function CoachTabs({ result, isDemo }: CoachTabsProps) {
                 </p>
               </div>
             )}
+            {speech?.valence?.normalizedTags &&
+              speech.valence.normalizedTags.length > 0 && (
+                <div>
+                  <p className="mb-1 font-medium text-gray-900">
+                    Delivery signals
+                  </p>
+                  <p className="text-gray-600">
+                    {speech.valence.normalizedTags.join(", ")}
+                  </p>
+                </div>
+              )}
           </div>
         )}
         {tab === "delivery" && (
-          <div className="space-y-2 text-gray-600">
-            <p>
-              Focus on steady pacing around 130–160 WPM for interview answers.
-            </p>
-            <p>
-              Reduce filler words like &ldquo;like&rdquo;, &ldquo;I think&rdquo;, and &ldquo;kind of&rdquo;
-              to sound more confident.
-            </p>
-            {speech?.energy_delivery_score && (
-              <p className="rounded-lg bg-brand-50 px-3 py-2 text-brand-800">
-                Your delivery: {speech.energy_delivery_score}
+          <div className="space-y-4 text-gray-700">
+            {result.coach_audio_url && (
+              <div className="rounded-lg bg-brand-50 px-3 py-2 text-brand-900">
+                <p className="mb-2 font-medium">Coach demo</p>
+                <audio controls src={result.coach_audio_url} className="w-full" />
+              </div>
+            )}
+            <div className="rounded-lg bg-brand-50 px-3 py-3 text-brand-900">
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+                Coach focus
               </p>
+              <p className="mt-1 font-medium">
+                {speech?.valence?.primaryFocus
+                  ? speech.valence.primaryFocus
+                  : speech?.energy_delivery_score ?? "Overall delivery"}
+              </p>
+              {speech?.emotional_coach_text && (
+                <p className="mt-2 leading-relaxed text-brand-800">
+                  {speech.emotional_coach_text}
+                </p>
+              )}
+            </div>
+            {speech?.practice_targets && speech.practice_targets.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <p className="font-medium text-gray-900">Practice loop</p>
+                  <p className="text-xs text-muted">
+                    Repeat each target, then submit another recording to compare.
+                  </p>
+                </div>
+                {speech.practice_targets.map((target, index) => (
+                  <div
+                    key={`${target.type}-${index}`}
+                    className="rounded-lg border border-border p-3"
+                  >
+                    <p className="font-medium text-gray-900">{target.focus}</p>
+                    <p className="mt-2 text-xs uppercase tracking-wide text-muted">
+                      Section
+                    </p>
+                    <p className="text-gray-700">{target.original}</p>
+                    <p className="mt-2 text-xs uppercase tracking-wide text-muted">
+                      Demo
+                    </p>
+                    <p className="text-gray-900">{target.demo}</p>
+                    <p className="mt-2 rounded-md bg-gray-50 px-2 py-1 text-gray-700">
+                      {target.practice_cue}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {speech?.feedback && speech.feedback.length > 0 && (
+              <div className="space-y-2">
+                <p className="font-medium text-gray-900">Quick tips</p>
+                {speech.feedback.map((item, index) => (
+                  <p key={index} className="rounded-md bg-gray-50 px-3 py-2">
+                    {item}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
         )}

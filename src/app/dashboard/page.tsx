@@ -7,7 +7,7 @@ import { SessionCard } from "@/components/dashboard/session-card";
 import { SessionToolbar } from "@/components/dashboard/session-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getSessions } from "@/lib/api-client";
+import { deleteSession, getSessions, updateSession } from "@/lib/api-client";
 import { createClient } from "@/lib/supabase/client";
 import type { Session } from "@/lib/api-types";
 import { Plus, Briefcase } from "lucide-react";
@@ -57,6 +57,21 @@ export default function DashboardPage() {
       return matchesSearch && matchesType;
     });
   }, [sessions, search, filterType]);
+
+  async function handleRenameSession(
+    id: string,
+    payload: { role: string; organisation: string }
+  ) {
+    const updated = await updateSession(id, payload);
+    setSessions((current) =>
+      current.map((session) => (session.id === id ? updated : session))
+    );
+  }
+
+  async function handleDeleteSession(id: string) {
+    await deleteSession(id);
+    setSessions((current) => current.filter((session) => session.id !== id));
+  }
 
   return (
     <div className="min-h-screen bg-surface">
@@ -110,7 +125,12 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((s) => (
-              <SessionCard key={s.id} session={s} />
+              <SessionCard
+                key={s.id}
+                session={s}
+                onRename={handleRenameSession}
+                onDelete={handleDeleteSession}
+              />
             ))}
           </div>
         )}

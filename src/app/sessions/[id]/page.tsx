@@ -17,6 +17,7 @@ import {
 } from "@/lib/api-client";
 import { DEMO_QUESTION } from "@/lib/demo-data";
 import type { AnalyzeResponse, Question, Session } from "@/lib/api-types";
+import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import { ArrowLeft } from "lucide-react";
 
 export default function SessionWorkspacePage() {
@@ -74,6 +75,9 @@ export default function SessionWorkspacePage() {
     () => questions.find((q) => q.id === activeQuestionId) ?? null,
     [questions, activeQuestionId]
   );
+  const workspaceCopy = session
+    ? getWorkspaceCopy(session.interview_type)
+    : getWorkspaceCopy("");
 
   useEffect(() => {
     if (!activeQuestionId) {
@@ -91,7 +95,10 @@ export default function SessionWorkspacePage() {
             transcript: latest.transcript,
             speech_analysis: latest.speech_analysis as AnalyzeResponse["speech_analysis"],
             script_analysis: latest.script_analysis as AnalyzeResponse["script_analysis"],
-            coach_audio_url: null,
+            coach_audio_url: latest.audio_url,
+            coach_audio_error:
+              (latest.speech_analysis as AnalyzeResponse["speech_analysis"])
+                ?.coach_audio_error ?? null,
           });
           setIsDemo(false);
         } else {
@@ -119,10 +126,13 @@ export default function SessionWorkspacePage() {
   async function handleGenerateMock() {
     setGenerating(true);
     try {
+      const prompt = session
+        ? workspaceCopy.defaultPrompt(session)
+        : DEMO_QUESTION;
       const q = await createQuestion({
         session_id: sessionId,
-        question_text: DEMO_QUESTION,
-        source: "mock",
+        question_text: prompt,
+        source: workspaceCopy.isPresentationLike ? "script_prompt" : "mock",
       });
       setQuestions((prev) => [...prev, q]);
       setActiveQuestionId(q.id);
@@ -131,8 +141,10 @@ export default function SessionWorkspacePage() {
       const fallback: Question = {
         id: `demo-q-${Date.now()}`,
         session_id: sessionId,
-        question_text: DEMO_QUESTION,
-        source: "mock",
+        question_text: session
+          ? workspaceCopy.defaultPrompt(session)
+          : DEMO_QUESTION,
+        source: workspaceCopy.isPresentationLike ? "script_prompt" : "mock",
         created_at: new Date().toISOString(),
       };
       setQuestions((prev) => [...prev, fallback]);
@@ -203,6 +215,12 @@ export default function SessionWorkspacePage() {
         <div className="grid min-h-[calc(100vh-180px)] grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="lg:col-span-3">
             <QuestionSidebar
+              title={workspaceCopy.sidebarTitle}
+              emptyText={workspaceCopy.emptyText}
+              generateLabel={workspaceCopy.generateLabel}
+              generatingLabel={workspaceCopy.generatingLabel}
+              addPlaceholder={workspaceCopy.addPlaceholder}
+              itemPrefix={workspaceCopy.itemPrefix}
               questions={questions}
               activeQuestionId={activeQuestionId}
               onSelectQuestion={setActiveQuestionId}
@@ -226,6 +244,9 @@ export default function SessionWorkspacePage() {
                   sessionId={sessionId}
                   questionId={activeQuestion.id}
                   questionText={activeQuestion.question_text}
+                  title={workspaceCopy.practiseTitle}
+                  textPlaceholder={workspaceCopy.practiseTextPlaceholder}
+                  audioHelp={workspaceCopy.audioHelp}
                   onAnalyzeStart={() => setAnalyzing(true)}
                   onAnalyzeComplete={handleAnalyzeComplete}
                 />
@@ -233,10 +254,10 @@ export default function SessionWorkspacePage() {
             ) : (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-white py-16 text-center">
                 <p className="mb-4 text-sm text-muted">
-                  Generate or add a question to start practising.
+                  {workspaceCopy.emptyText}
                 </p>
                 <Button onClick={() => void handleGenerateMock()} disabled={generating}>
-                  Generate mock question
+                  {workspaceCopy.generateLabel}
                 </Button>
               </div>
             )}

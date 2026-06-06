@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils";
 import { Plus, Sparkles } from "lucide-react";
 
 interface QuestionSidebarProps {
+  title?: string;
+  emptyText?: string;
+  generateLabel?: string;
+  generatingLabel?: string;
+  addPlaceholder?: string;
+  itemPrefix?: string;
   questions: Question[];
   activeQuestionId: string | null;
   onSelectQuestion: (id: string) => void;
@@ -18,6 +24,12 @@ interface QuestionSidebarProps {
 }
 
 export function QuestionSidebar({
+  title = "Questions",
+  emptyText = "Add or generate a question to begin practising.",
+  generateLabel = "Generate mock question",
+  generatingLabel = "Generating...",
+  addPlaceholder = "Type your own question...",
+  itemPrefix = "Q",
   questions,
   activeQuestionId,
   onSelectQuestion,
@@ -43,13 +55,13 @@ export function QuestionSidebar({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader>
-        <h3 className="text-sm font-semibold">Questions</h3>
+        <h3 className="text-sm font-semibold">{title}</h3>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2 overflow-hidden">
         <div className="flex-1 space-y-1 overflow-y-auto">
           {questions.length === 0 && (
             <p className="py-2 text-xs text-muted">
-              Add or generate a question to begin practising.
+              {emptyText}
             </p>
           )}
           {questions.map((q, i) => (
@@ -64,7 +76,7 @@ export function QuestionSidebar({
                   : "border-transparent hover:bg-gray-50"
               )}
             >
-              <span className="text-xs text-muted">Q{i + 1}</span>
+              <span className="text-xs text-muted">{itemPrefix}{i + 1}</span>
               <p className="mt-0.5 line-clamp-2">{q.question_text}</p>
               {scoredQuestionIds.has(q.id) && (
                 <span className="mt-1 inline-block text-xs text-brand-600">Scored</span>
@@ -81,14 +93,14 @@ export function QuestionSidebar({
             disabled={generating}
           >
             <Sparkles className="mr-1 h-3 w-3" />
-            {generating ? "Generating…" : "Generate mock question"}
+            {generating ? generatingLabel : generateLabel}
           </Button>
           <div className="flex gap-1">
             <input
               type="text"
               value={customQuestion}
               onChange={(e) => setCustomQuestion(e.target.value)}
-              placeholder="Type your own question…"
+              placeholder={addPlaceholder}
               className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
               onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
             />

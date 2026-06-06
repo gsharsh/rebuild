@@ -7,6 +7,7 @@ import type {
   CreateSessionPayload,
   Question,
   Session,
+  UpdateSessionPayload,
 } from "@/lib/api-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -84,6 +85,22 @@ export async function createSession(
 
 export async function getSession(id: string): Promise<Session> {
   return apiFetch<Session>(`/api/sessions/${id}`);
+}
+
+export async function updateSession(
+  id: string,
+  payload: UpdateSessionPayload
+): Promise<Session> {
+  return apiFetch<Session>(`/api/sessions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  return apiFetch<void>(`/api/sessions/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function getSessionQuestions(

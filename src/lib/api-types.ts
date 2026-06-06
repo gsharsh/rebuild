@@ -33,6 +33,36 @@ export interface SpeechAnalysis {
   pacing_words_per_minute: number;
   energy_delivery_score: string;
   hesitation_markers_detected: string[];
+  pace_label?: string;
+  filler_count?: number;
+  filler_per_minute?: number;
+  confidence_phrases?: string[];
+  repeated_words?: string[];
+  long_sentences?: string[];
+  struggle_sentences?: Array<{
+    sentence: string;
+    reason: string;
+    severity: string;
+  }>;
+  feedback?: string[];
+  practice_targets?: Array<{
+    type: string;
+    focus: string;
+    original: string;
+    demo: string;
+    practice_cue: string;
+  }>;
+  valence?: {
+    raw?: Record<string, unknown>;
+    normalizedTags?: string[];
+    primaryFocus?: string;
+    scores?: Record<string, number>;
+    valenceFailed?: boolean;
+  };
+  emotional_coach_ssml?: string;
+  emotional_coach_text?: string;
+  emotional_next_action?: string;
+  coach_audio_error?: string;
 }
 
 export interface Answer {
@@ -59,12 +89,19 @@ export interface AnalyzeResponse {
   speech_analysis: SpeechAnalysis;
   script_analysis: ScriptAnalysis;
   coach_audio_url: string | null;
+  coach_audio_error?: string | null;
 }
 
 export interface CreateSessionPayload {
   interview_type: string;
   role: string;
   organisation: string;
+  context?: string | null;
+}
+
+export interface UpdateSessionPayload {
+  role?: string;
+  organisation?: string;
   context?: string | null;
 }
 
