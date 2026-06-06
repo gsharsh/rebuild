@@ -1,5 +1,7 @@
 # SpeakReady
 
+Submission for [Rebuild x ElevenLabs Hackathon](https://github.com/gsharsh/rebuild)
+
 AI interview and presentation coach for multilingual and under-coached students.
 
 ## Quick Start
