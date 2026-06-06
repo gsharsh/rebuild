@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  supabaseUserId String   @unique
+  email          String
+  name           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions Session[]
+  answers  Answer[]
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  userId         String
+  interviewType  String
+  role           String
+  organisation   String
+  context        String   @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions Question[]
+  answers   Answer[]
+}
+
+model Question {
+  id           String   @id @default(cuid())
+  sessionId    String
+  questionText String   @db.Text
+  source       String
+  createdAt    DateTime @default(now())
+
+  session Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answers Answer[]
+}
+
+model Answer {
+  id               String   @id @default(cuid())
+  sessionId        String
+  questionId       String
+  userId           String
+  answerMode       String
+  originalText     String?  @db.Text
+  transcript       String?  @db.Text
+  nativeLanguage   String?
+  translatedText   String?  @db.Text
+  durationSeconds  Float?
+  audioPath        String?
+  videoPath        String?
+  speechAnalysis   Json?
+  scriptAnalysis   Json?
+  postureAnalysis  Json?
+  finalFeedback    Json?
+  createdAt        DateTime @default(now())
+
+  session       Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uploadedFiles UploadedFile[]
+  feedback      Feedback?
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  answerId     String
+  fileType     String
+  filePath     String
+  originalName String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  answer Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id                  String   @id @default(cuid())
+  answerId            String   @unique
+  scriptScore         Float?
+  speechScore         Float?
+  postureScore        Float?
+  overallScore        Float?
+  summary             String?  @db.Text
+  improvedAnswer      String?  @db.Text
+  easierToSayVersion  String?  @db.Text
+  sixtySecondVersion  String?  @db.Text
+  teachingNotes       Json?
+  phrasesToPractice   Json?
+  audioFeedbackPath   String?
+  createdAt           DateTime @default(now())
+
+  answer Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+}
