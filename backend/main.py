@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import requests
 import shutil
 import subprocess
 import time
@@ -160,13 +161,21 @@ def fallback_script(text: str) -> dict[str, Any]:
     }
 
 
-def analyze_script(role: str, org: str, question: str, text: str) -> dict[str, Any]:
+def analyze_script(
+    role: str,
+    org: str,
+    question: str,
+    text: str,
+    session_type: str = "Interview",
+    context: Optional[str] = None,
+) -> dict[str, Any]:
     if not gemini_client:
         return fallback_script(text)
 
     system_instruction = """
 You are SpeakReady's supportive Script Coach for multilingual, first-generation, immigrant, and under-coached students.
-Do not frame feedback as accent fixing or bad English. Focus on clearer delivery, listener-friendly phrasing, and interview readiness.
+Do not frame feedback as accent fixing or bad English. Focus on clearer delivery, listener-friendly phrasing, and rehearsal readiness.
+Use the user's transcript as the source of truth. Context is only background to understand what they mean; never replace the user's topic with generic interview content.
 Return JSON only:
 {
   "improved_script": "Polished text structured for natural spoken delivery.",
@@ -174,7 +183,14 @@ Return JSON only:
   "coaching_lesson": "Short explanation helping the student learn the improvement."
 }
 """
-    prompt = f"Role: {role} | Organisation: {org}\nQuestion: {question}\nAnswer: {text}"
+    prompt = (
+        f"Session type: {session_type}\n"
+        f"Role/topic: {role}\n"
+        f"Organisation/audience: {org}\n"
+        f"Background context: {context or 'None provided'}\n"
+        f"Prompt/script section: {question}\n"
+        f"Actual user transcript: {text}"
+    )
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
         response_mime_type="application/json",
@@ -350,6 +366,51 @@ def speech_metrics(text: str, duration_seconds: float = 0) -> dict[str, Any]:
     }
 
 
+def pace_timeline_from_words(
+    words_payload: Any,
+    duration_seconds: float,
+) -> list[dict[str, float]]:
+    if not isinstance(words_payload, list) or duration_seconds <= 0:
+        return []
+    spoken_words = []
+    for item in words_payload:
+        if not isinstance(item, dict):
+            continue
+        token = str(item.get("word") or item.get("text") or "").strip()
+        if not token or not re.search(r"[A-Za-z0-9]", token):
+            continue
+        start = item.get("start") if item.get("start") is not None else item.get("start_time")
+        end = item.get("end") if item.get("end") is not None else item.get("end_time")
+        try:
+            start_f = float(start)
+            end_f = float(end if end is not None else start_f)
+        except (TypeError, ValueError):
+            continue
+        spoken_words.append({"word": token, "start": start_f, "end": end_f})
+
+    if not spoken_words:
+        return []
+
+    bucket_seconds = 5
+    total = max(duration_seconds, spoken_words[-1]["end"], bucket_seconds)
+    bucket_count = max(1, int((total + bucket_seconds - 0.001) // bucket_seconds))
+    timeline = []
+    for index in range(bucket_count):
+        start = index * bucket_seconds
+        end = min(start + bucket_seconds, total)
+        count = sum(1 for word in spoken_words if start <= word["start"] < end)
+        seconds = max(end - start, 1)
+        timeline.append(
+            {
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "wpm": round(count / seconds * 60, 1),
+                "word_count": count,
+            }
+        )
+    return timeline
+
+
 def build_practice_targets(
     transcript: str,
     metrics: dict[str, Any],
@@ -407,6 +468,83 @@ def build_practice_targets(
         )
 
     return targets[:4]
+
+
+def analyze_delivery_plan(
+    session: dict[str, Any],
+    question: str,
+    transcript: str,
+    script_analysis: dict[str, Any],
+    metrics: dict[str, Any],
+    normalized: dict[str, Any],
+) -> dict[str, Any]:
+    fallback_targets = build_practice_targets(transcript, metrics, normalized)
+    if not gemini_client:
+        return {
+            "valence_insight": "Emotional tone is estimated from speech pace, fillers, and available voice signals.",
+            "practice_sections": fallback_targets,
+        }
+
+    system_instruction = """
+You are SpeakReady's delivery coach. Create a concrete practice plan from the user's actual transcript.
+Use context only to understand the topic. Do not invent unrelated interview answers.
+Return JSON only:
+{
+  "valence_insight": "One useful emotional intelligence insight in plain English.",
+  "practice_sections": [
+    {
+      "type": "opening|transition|evidence|closing|clarity|tone|pace",
+      "title": "Short section title",
+      "focus": "What to improve",
+      "original": "Exact phrase or sentence from the transcript",
+      "demo": "Improved version of that same idea",
+      "practice_cue": "How to rehearse this section out loud",
+      "reason": "Why this helps the listener"
+    }
+  ]
+}
+Rules:
+- Pick 2 to 4 sections from the transcript.
+- Each original must be from the transcript.
+- For presentations, focus on script clarity, transitions, audience understanding, emphasis, and delivery.
+- For interviews, focus on direct answer, evidence, confidence, concision, and delivery.
+- If the transcript is short, create one high-quality section only.
+"""
+    prompt = {
+        "session_type": session.get("interview_type"),
+        "topic_or_role": session.get("role"),
+        "audience_or_organisation": session.get("organisation"),
+        "background_context": session.get("context"),
+        "prompt": question,
+        "transcript": transcript,
+        "improved_script": script_analysis.get("improved_script"),
+        "speech_metrics": metrics,
+        "delivery_emotion_signals": normalized,
+    }
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.25,
+    )
+
+    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+        try:
+            response = gemini_client.models.generate_content(
+                model=model,
+                contents=json.dumps(prompt),
+                config=config,
+            )
+            data = safe_json(response.text)
+            sections = data.get("practice_sections")
+            if isinstance(sections, list) and sections:
+                return data
+        except Exception:
+            continue
+
+    return {
+        "valence_insight": "Use the emotional signal as a rehearsal cue: adjust pace, emphasis, and certainty so the listener can follow the message.",
+        "practice_sections": fallback_targets,
+    }
 
 
 def extract_scores_from_valence(raw: Any) -> dict[str, float]:
@@ -745,6 +883,87 @@ def convert_audio_to_wav(
                 pass
 
 
+def audio_payload_for_ai(
+    audio_content: bytes,
+    filename: Optional[str],
+    content_type: str,
+) -> tuple[bytes, str, str, Optional[str]]:
+    extension = ""
+    if filename and "." in filename:
+        extension = filename.rsplit(".", 1)[-1].lower()
+    is_wav = extension == "wav" or content_type.lower() in {"audio/wav", "audio/x-wav", "audio/wave"}
+    if is_wav:
+        return audio_content, filename or "recording.wav", content_type or "audio/wav", None
+
+    converted_path, conversion_error = convert_audio_to_wav(audio_content, extension or "webm")
+    if not converted_path:
+        return audio_content, filename or "recording.webm", content_type or "audio/webm", conversion_error
+
+    try:
+        with open(converted_path, "rb") as wav_file:
+            return wav_file.read(), "recording.wav", "audio/wav", None
+    finally:
+        try:
+            os.unlink(converted_path)
+        except OSError:
+            pass
+
+
+def transcribe_with_elevenlabs(
+    audio_content: bytes,
+    filename: Optional[str],
+    content_type: str,
+) -> tuple[Optional[str], dict[str, Any], Optional[str]]:
+    if not ELEVENLABS_API_KEY:
+        return None, {}, "Missing ELEVENLABS_API_KEY."
+
+    stt_bytes, stt_filename, stt_content_type, conversion_error = audio_payload_for_ai(
+        audio_content,
+        filename,
+        content_type,
+    )
+    try:
+        response = requests.post(
+            "https://api.elevenlabs.io/v1/speech-to-text",
+            headers={"xi-api-key": ELEVENLABS_API_KEY},
+            data={"model_id": "scribe_v1"},
+            files={"file": (stt_filename, stt_bytes, stt_content_type)},
+            timeout=60,
+        )
+        if not response.ok:
+            return None, {}, f"ElevenLabs STT failed ({response.status_code}): {response.text[:300]}"
+        data = response.json()
+        transcript = str(data.get("text") or "").strip()
+        if not transcript:
+            return None, data, "ElevenLabs STT returned an empty transcript."
+        if conversion_error:
+            data["conversion_warning"] = conversion_error
+        return transcript, data, None
+    except Exception as exc:
+        return None, {}, str(exc)
+
+
+def transcribe_with_gemini(audio_content: bytes, content_type: str) -> tuple[Optional[str], Optional[str]]:
+    if not gemini_client:
+        return None, "Gemini client is not configured."
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=audio_content, mime_type=content_type or "audio/webm"
+                ),
+                "Transcribe this rehearsal recording exactly. Return only transcript text.",
+            ],
+        )
+        transcript = response.text.strip()
+        if not transcript:
+            return None, "Gemini returned an empty transcript."
+        return transcript, None
+    except Exception as exc:
+        return None, str(exc)
+
+
 def call_valence(
     audio_content: bytes,
     content_type: str,
@@ -832,6 +1051,100 @@ def coach_voice_memo(lesson_text: str, user_id: str, answer_id: str) -> tuple[Op
         return supabase_admin.storage.from_("speakready-media").get_public_url(storage_path), None
     except Exception as exc:
         return None, str(exc)
+
+
+def words_for_matching(words_payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(words_payload, list):
+        return []
+    words = []
+    for item in words_payload:
+        if not isinstance(item, dict):
+            continue
+        token = str(item.get("word") or item.get("text") or "").strip()
+        cleaned = re.sub(r"[^a-z0-9']", "", token.lower())
+        if not cleaned:
+            continue
+        start = item.get("start") if item.get("start") is not None else item.get("start_time")
+        end = item.get("end") if item.get("end") is not None else item.get("end_time")
+        try:
+            words.append(
+                {
+                    "word": cleaned,
+                    "start": float(start),
+                    "end": float(end if end is not None else start),
+                }
+            )
+        except (TypeError, ValueError):
+            continue
+    return words
+
+
+def estimate_section_bounds(original: str, words_payload: Any) -> tuple[Optional[float], Optional[float]]:
+    timeline_words = words_for_matching(words_payload)
+    target_words = [
+        word
+        for word in re.sub(r"[^a-z0-9' ]", " ", original.lower()).split()
+        if word
+    ]
+    if not timeline_words or not target_words:
+        return None, None
+
+    best_start = None
+    best_score = 0
+    window_size = min(len(target_words), max(1, len(timeline_words)))
+    for start_index in range(0, max(1, len(timeline_words) - window_size + 1)):
+        window = timeline_words[start_index : start_index + window_size]
+        score = sum(
+            1
+            for index, target_word in enumerate(target_words[: len(window)])
+            if index < len(window) and target_word == window[index]["word"]
+        )
+        if score > best_score:
+            best_score = score
+            best_start = start_index
+
+    if best_start is None or best_score == 0:
+        return None, None
+
+    end_index = min(best_start + window_size - 1, len(timeline_words) - 1)
+    return timeline_words[best_start]["start"], timeline_words[end_index]["end"]
+
+
+def enrich_practice_targets(
+    targets: list[dict[str, Any]],
+    words_payload: Any,
+    user_id: str,
+    answer_id: str,
+    has_recording: bool,
+) -> list[dict[str, Any]]:
+    enriched = []
+    for index, target in enumerate(targets[:4]):
+        item = dict(target)
+        if has_recording:
+            start, end = estimate_section_bounds(str(item.get("original") or ""), words_payload)
+            if start is not None and end is not None:
+                item["start_time"] = round(max(start - 0.25, 0), 2)
+                item["end_time"] = round(end + 0.35, 2)
+
+        title = item.get("title") or item.get("focus") or f"Section {index + 1}"
+        coach_text = (
+            f"Practice section {index + 1}: {title}. "
+            f"First, listen to your original delivery in the app. "
+            f"The improvement focus is: {item.get('focus', 'clearer delivery')}. "
+            f"Here is a stronger version: {item.get('demo', item.get('original', ''))}. "
+            f"Now repeat it. {item.get('practice_cue', '')}"
+        )
+        section_url, section_error = coach_voice_memo(
+            coach_text,
+            user_id,
+            f"{answer_id}_section_{index + 1}",
+        )
+        if section_url:
+            item["coach_audio_url"] = section_url
+        if section_error:
+            item["coach_audio_error"] = section_error
+        enriched.append(item)
+    return enriched
 
 
 def owned_session(session_id: str, user_id: str) -> dict[str, Any]:
@@ -967,6 +1280,8 @@ async def analyze_text_answer(data: TextAnswerSubmit, user_id: str = Depends(get
         org=session["organisation"],
         question=question,
         text=data.original_text,
+        session_type=session.get("interview_type", "Interview"),
+        context=session.get("context"),
     )
     speech_analysis = speech_metrics(data.original_text)
     normalized = normalize_valence(
@@ -975,12 +1290,25 @@ async def analyze_text_answer(data: TextAnswerSubmit, user_id: str = Depends(get
         speech_analysis,
     )
     emotional_coach = build_emotional_coach(data.original_text, normalized)
-    practice_targets = build_practice_targets(data.original_text, speech_analysis, normalized)
+    delivery_plan = analyze_delivery_plan(
+        session,
+        question,
+        data.original_text,
+        script_analysis,
+        speech_analysis,
+        normalized,
+    )
+    practice_targets = delivery_plan.get("practice_sections") or build_practice_targets(
+        data.original_text,
+        speech_analysis,
+        normalized,
+    )
     speech_analysis["valence"] = {
         "raw": {"prediction": "neutral", "source": "text_only"},
         "valenceFailed": True,
         **normalized,
     }
+    speech_analysis["valence_insight"] = delivery_plan.get("valence_insight")
     speech_analysis["emotional_coach_ssml"] = emotional_coach["ssml"]
     speech_analysis["emotional_coach_text"] = emotional_coach["text"]
     speech_analysis["emotional_next_action"] = emotional_coach["nextAction"]
@@ -996,6 +1324,17 @@ async def analyze_text_answer(data: TextAnswerSubmit, user_id: str = Depends(get
         "speech_analysis": speech_analysis,
     }
     answer = supabase_admin.table("answers").insert(answer_payload).execute().data[0]
+    practice_targets = enrich_practice_targets(
+        practice_targets,
+        [],
+        user_id,
+        answer["id"],
+        False,
+    )
+    speech_analysis["practice_targets"] = practice_targets
+    supabase_admin.table("answers").update({"speech_analysis": speech_analysis}).eq(
+        "id", answer["id"]
+    ).execute()
     coach_url, coach_error = coach_voice_memo(
         coach_memo_text(
             script_analysis.get("coaching_lesson", ""),
@@ -1022,6 +1361,7 @@ async def analyze_text_answer(data: TextAnswerSubmit, user_id: str = Depends(get
         "script_analysis": script_analysis,
         "coach_audio_url": coach_url,
         "coach_audio_error": coach_error,
+        "recording_url": None,
     }
 
 
@@ -1049,26 +1389,46 @@ async def analyze_audio_answer(
     except Exception:
         media_url = None
 
-    transcript = "[Audio received. Transcription is unavailable in demo mode.]"
-    if gemini_client:
-        try:
-            response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Part.from_bytes(
-                        data=audio_content, mime_type=file.content_type or "audio/webm"
-                    ),
-                    "Transcribe this interview answer exactly. Return only transcript text.",
-                ],
+    transcript, stt_payload, stt_error = transcribe_with_elevenlabs(
+        audio_content,
+        file.filename,
+        file.content_type or "audio/webm",
+    )
+    if not transcript:
+        transcript, gemini_stt_error = transcribe_with_gemini(
+            audio_content,
+            file.content_type or "audio/webm",
+        )
+        if not transcript:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Transcription failed. "
+                    f"ElevenLabs: {stt_error or 'no transcript'}. "
+                    f"Gemini: {gemini_stt_error or 'no transcript'}."
+                ),
             )
-            transcript = response.text.strip()
-        except Exception:
-            pass
+        stt_payload = {"source": "gemini_fallback", "error": stt_error}
+    else:
+        stt_payload["source"] = "elevenlabs_scribe"
 
     script_analysis = analyze_script(
-        role=session["role"], org=session["organisation"], question=question, text=transcript
+        role=session["role"],
+        org=session["organisation"],
+        question=question,
+        text=transcript,
+        session_type=session.get("interview_type", "Interview"),
+        context=session.get("context"),
     )
     speech_analysis = speech_metrics(transcript, duration_seconds)
+    speech_analysis["transcription"] = {
+        "source": stt_payload.get("source", "elevenlabs_scribe"),
+        "language": stt_payload.get("language_code") or stt_payload.get("language"),
+    }
+    speech_analysis["pace_timeline"] = pace_timeline_from_words(
+        stt_payload.get("words") or stt_payload.get("word_timestamps"),
+        duration_seconds,
+    )
     raw_valence, valence_failed = call_valence(
         audio_content,
         file.content_type or "audio/webm",
@@ -1077,12 +1437,25 @@ async def analyze_audio_answer(
     )
     normalized = normalize_valence(raw_valence, transcript, speech_analysis)
     emotional_coach = build_emotional_coach(transcript, normalized)
-    practice_targets = build_practice_targets(transcript, speech_analysis, normalized)
+    delivery_plan = analyze_delivery_plan(
+        session,
+        question,
+        transcript,
+        script_analysis,
+        speech_analysis,
+        normalized,
+    )
+    practice_targets = delivery_plan.get("practice_sections") or build_practice_targets(
+        transcript,
+        speech_analysis,
+        normalized,
+    )
     speech_analysis["valence"] = {
         "raw": raw_valence,
         "valenceFailed": valence_failed,
         **normalized,
     }
+    speech_analysis["valence_insight"] = delivery_plan.get("valence_insight")
     speech_analysis["emotional_coach_ssml"] = emotional_coach["ssml"]
     speech_analysis["emotional_coach_text"] = emotional_coach["text"]
     speech_analysis["emotional_next_action"] = emotional_coach["nextAction"]
@@ -1099,6 +1472,17 @@ async def analyze_audio_answer(
         "speech_analysis": speech_analysis,
     }
     answer = supabase_admin.table("answers").insert(answer_payload).execute().data[0]
+    practice_targets = enrich_practice_targets(
+        practice_targets,
+        stt_payload.get("words") or stt_payload.get("word_timestamps"),
+        user_id,
+        answer["id"],
+        media_url is not None,
+    )
+    speech_analysis["practice_targets"] = practice_targets
+    supabase_admin.table("answers").update({"speech_analysis": speech_analysis}).eq(
+        "id", answer["id"]
+    ).execute()
     coach_url, coach_error = coach_voice_memo(
         coach_memo_text(
             script_analysis.get("coaching_lesson", ""),
@@ -1125,4 +1509,5 @@ async def analyze_audio_answer(
         "script_analysis": script_analysis,
         "coach_audio_url": coach_url,
         "coach_audio_error": coach_error,
+        "recording_url": media_url,
     }

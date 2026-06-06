@@ -1,14 +1,135 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AnalyzeResponse } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
+import { Play, Volume2 } from "lucide-react";
 
 type CoachTab = "speech" | "delivery" | "lesson";
 
 interface CoachTabsProps {
   result: AnalyzeResponse;
   isDemo?: boolean;
+}
+
+type PracticeTarget = NonNullable<
+  AnalyzeResponse["speech_analysis"]["practice_targets"]
+>[number];
+
+function PracticeTargetCard({
+  target,
+  index,
+  recordingUrl,
+}: {
+  target: PracticeTarget;
+  index: number;
+  recordingUrl?: string | null;
+}) {
+  const originalAudioRef = useRef<HTMLAudioElement>(null);
+  const coachAudioRef = useRef<HTMLAudioElement>(null);
+  const [active, setActive] = useState(false);
+
+  const hasOriginalClip =
+    recordingUrl && target.start_time != null && target.end_time != null;
+
+  async function playOriginalClip() {
+    const audio = originalAudioRef.current;
+    if (!audio || target.start_time == null) return;
+    audio.currentTime = target.start_time;
+    await audio.play();
+  }
+
+  async function playCoachDemo() {
+    const audio = coachAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    await audio.play();
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border p-3 transition-colors",
+        active ? "bg-brand-50/60" : "bg-white"
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setActive((open) => !open)}
+        className="w-full text-left"
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+          Drill {index + 1}
+        </p>
+        <p className="mt-1 font-medium text-gray-900">
+          {target.title ?? target.focus}
+        </p>
+        <p className="mt-1 text-sm text-gray-600">{target.focus}</p>
+      </button>
+
+      {active && (
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void playOriginalClip()}
+              disabled={!hasOriginalClip}
+              className="flex items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Play className="h-4 w-4" />
+              Play your version
+            </button>
+            <button
+              type="button"
+              onClick={() => void playCoachDemo()}
+              disabled={!target.coach_audio_url}
+              className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Volume2 className="h-4 w-4" />
+              Play coach demo
+            </button>
+          </div>
+
+          {recordingUrl && (
+            <audio
+              ref={originalAudioRef}
+              src={recordingUrl}
+              onTimeUpdate={(event) => {
+                if (
+                  target.end_time != null &&
+                  event.currentTarget.currentTime >= target.end_time
+                ) {
+                  event.currentTarget.pause();
+                }
+              }}
+              className="hidden"
+            />
+          )}
+          {target.coach_audio_url && (
+            <audio ref={coachAudioRef} src={target.coach_audio_url} className="hidden" />
+          )}
+
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">What you said</p>
+            <p className="text-gray-700">{target.original}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">
+              Improved version
+            </p>
+            <p className="font-medium text-gray-900">{target.demo}</p>
+          </div>
+          {target.reason && <p className="text-sm text-gray-600">{target.reason}</p>}
+          <p className="rounded-md bg-gray-50 px-2 py-1 text-gray-700">
+            {target.practice_cue}
+          </p>
+          {target.coach_audio_error && (
+            <p className="text-xs text-amber-700">{target.coach_audio_error}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CoachTabs({ result, isDemo }: CoachTabsProps) {
@@ -87,9 +208,7 @@ export function CoachTabs({ result, isDemo }: CoachTabsProps) {
             {speech?.valence?.normalizedTags &&
               speech.valence.normalizedTags.length > 0 && (
                 <div>
-                  <p className="mb-1 font-medium text-gray-900">
-                    Delivery signals
-                  </p>
+                  <p className="mb-1 font-medium text-gray-900">Delivery signals</p>
                   <p className="text-gray-600">
                     {speech.valence.normalizedTags.join(", ")}
                   </p>
@@ -119,33 +238,27 @@ export function CoachTabs({ result, isDemo }: CoachTabsProps) {
                   {speech.emotional_coach_text}
                 </p>
               )}
+              {speech?.valence_insight && (
+                <p className="mt-2 rounded-md bg-white/70 px-2 py-2 text-brand-800">
+                  {speech.valence_insight}
+                </p>
+              )}
             </div>
             {speech?.practice_targets && speech.practice_targets.length > 0 && (
               <div className="space-y-3">
                 <div>
-                  <p className="font-medium text-gray-900">Practice loop</p>
+                  <p className="font-medium text-gray-900">Sections to practise</p>
                   <p className="text-xs text-muted">
-                    Repeat each target, then submit another recording to compare.
+                    Repeat each section, then submit another recording to compare.
                   </p>
                 </div>
                 {speech.practice_targets.map((target, index) => (
-                  <div
+                  <PracticeTargetCard
                     key={`${target.type}-${index}`}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <p className="font-medium text-gray-900">{target.focus}</p>
-                    <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                      Section
-                    </p>
-                    <p className="text-gray-700">{target.original}</p>
-                    <p className="mt-2 text-xs uppercase tracking-wide text-muted">
-                      Demo
-                    </p>
-                    <p className="text-gray-900">{target.demo}</p>
-                    <p className="mt-2 rounded-md bg-gray-50 px-2 py-1 text-gray-700">
-                      {target.practice_cue}
-                    </p>
-                  </div>
+                    target={target}
+                    index={index}
+                    recordingUrl={result.recording_url}
+                  />
                 ))}
               </div>
             )}

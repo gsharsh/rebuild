@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 
 interface ScoreCardProps {
   label: string;
-  value: string | number;
+  value: ReactNode;
   sublabel?: string;
   variant?: "default" | "accent" | "muted";
   className?: string;
@@ -28,7 +29,7 @@ export function ScoreCard({
       )}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-gray-900">{value}</p>
+      <div className="mt-1 text-xl font-semibold text-gray-900">{value}</div>
       {sublabel && <p className="mt-0.5 text-xs text-muted">{sublabel}</p>}
     </div>
   );

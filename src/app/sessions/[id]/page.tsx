@@ -99,6 +99,7 @@ export default function SessionWorkspacePage() {
             coach_audio_error:
               (latest.speech_analysis as AnalyzeResponse["speech_analysis"])
                 ?.coach_audio_error ?? null,
+            recording_url: latest.video_url,
           });
           setIsDemo(false);
         } else {

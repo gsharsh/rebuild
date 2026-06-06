@@ -39,6 +39,12 @@ export interface SpeechAnalysis {
   confidence_phrases?: string[];
   repeated_words?: string[];
   long_sentences?: string[];
+  pace_timeline?: Array<{
+    start: number;
+    end: number;
+    wpm: number;
+    word_count: number;
+  }>;
   struggle_sentences?: Array<{
     sentence: string;
     reason: string;
@@ -47,10 +53,16 @@ export interface SpeechAnalysis {
   feedback?: string[];
   practice_targets?: Array<{
     type: string;
+    title?: string;
     focus: string;
     original: string;
     demo: string;
     practice_cue: string;
+    reason?: string;
+    start_time?: number;
+    end_time?: number;
+    coach_audio_url?: string;
+    coach_audio_error?: string;
   }>;
   valence?: {
     raw?: Record<string, unknown>;
@@ -59,6 +71,7 @@ export interface SpeechAnalysis {
     scores?: Record<string, number>;
     valenceFailed?: boolean;
   };
+  valence_insight?: string;
   emotional_coach_ssml?: string;
   emotional_coach_text?: string;
   emotional_next_action?: string;
@@ -90,6 +103,7 @@ export interface AnalyzeResponse {
   script_analysis: ScriptAnalysis;
   coach_audio_url: string | null;
   coach_audio_error?: string | null;
+  recording_url?: string | null;
 }
 
 export interface CreateSessionPayload {
