@@ -42,5 +42,10 @@ next-env.d.ts
 # uploads
 /uploads
 
+# python backend
+backend/.venv/
+__pycache__/
+*.pyc
+
 # prisma
 prisma/migrations/**/migration_lock.toml

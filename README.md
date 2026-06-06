@@ -26,6 +26,14 @@ cp .env.example .env
 
 ### 3. Run the app
 
+Start the FastAPI backend:
+
+```bash
+backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+Then start the frontend:
+
 ```bash
 npm run dev
 ```
