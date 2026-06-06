@@ -97,6 +97,8 @@ export function QuestionSidebar({
     }
   }
 
+  const isPitchOrPresentation = itemPrefix.toLowerCase() === "part";
+
   return (
     <Card className="flex h-full min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0">
@@ -156,6 +158,26 @@ export function QuestionSidebar({
         </div>
 
         <div className="shrink-0 space-y-2 border-t border-border bg-white pt-3">
+          {!isPitchOrPresentation && (
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={customQuestion}
+                onChange={(e) => setCustomQuestion(e.target.value)}
+                placeholder={addPlaceholder}
+                className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
+                onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleAdd()}
+                disabled={adding || !customQuestion.trim()}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
           <Button
             size="sm"
             className="w-full"
@@ -165,24 +187,26 @@ export function QuestionSidebar({
             <Sparkles className="mr-1 h-3 w-3" />
             {generating ? generatingLabel : generateLabel}
           </Button>
-          <div className="flex gap-1">
-            <input
-              type="text"
-              value={customQuestion}
-              onChange={(e) => setCustomQuestion(e.target.value)}
-              placeholder={addPlaceholder}
-              className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
-              onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void handleAdd()}
-              disabled={adding || !customQuestion.trim()}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+          {isPitchOrPresentation && (
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={customQuestion}
+                onChange={(e) => setCustomQuestion(e.target.value)}
+                placeholder={addPlaceholder}
+                className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
+                onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleAdd()}
+                disabled={adding || !customQuestion.trim()}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

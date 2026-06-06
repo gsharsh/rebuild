@@ -20,7 +20,7 @@ const INTERVIEW_COPY: WorkspaceCopy = {
   isPresentationLike: false,
   sidebarTitle: "Questions",
   emptyText: "Add or generate a question to begin practising.",
-  generateLabel: "Generate mock question",
+  generateLabel: "Generate random question",
   generatingLabel: "Generating...",
   addPlaceholder: "Type your own question...",
   itemPrefix: "Q",
