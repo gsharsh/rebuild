@@ -7,7 +7,12 @@ import { SessionCard } from "@/components/dashboard/session-card";
 import { SessionToolbar } from "@/components/dashboard/session-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { deleteSession, getSessions, updateSession } from "@/lib/api-client";
+import {
+  deleteSession,
+  getSessionQuestions,
+  getSessions,
+  updateSession,
+} from "@/lib/api-client";
 import { createClient } from "@/lib/supabase/client";
 import type { Session } from "@/lib/api-types";
 import { Plus, Briefcase } from "lucide-react";
@@ -15,6 +20,7 @@ import { Plus, Briefcase } from "lucide-react";
 export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -37,6 +43,17 @@ export default function DashboardPage() {
 
         const data = await getSessions();
         setSessions(data);
+        const counts = await Promise.all(
+          data.map(async (session) => {
+            try {
+              const questions = await getSessionQuestions(session.id);
+              return [session.id, questions.length] as const;
+            } catch {
+              return [session.id, 0] as const;
+            }
+          })
+        );
+        setSessionCounts(Object.fromEntries(counts));
       } catch {
         setSessions([]);
       } finally {
@@ -71,6 +88,11 @@ export default function DashboardPage() {
   async function handleDeleteSession(id: string) {
     await deleteSession(id);
     setSessions((current) => current.filter((session) => session.id !== id));
+    setSessionCounts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }
 
   return (
@@ -128,6 +150,7 @@ export default function DashboardPage() {
               <SessionCard
                 key={s.id}
                 session={s}
+                itemCount={sessionCounts[s.id] ?? 0}
                 onRename={handleRenameSession}
                 onDelete={handleDeleteSession}
               />

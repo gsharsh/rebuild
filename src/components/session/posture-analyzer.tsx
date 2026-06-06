@@ -32,20 +32,6 @@ type PoseLandmarkerModule = {
   };
 };
 
-const FALLBACK_POSTURE: PostureResult = {
-  score: 70,
-  signals: [
-    "Camera posture check could not confidently detect face landmarks",
-    "Basic camera presence was available",
-  ],
-  suggestions: [
-    "Keep your face centered and well lit.",
-    "Keep notes near camera height so your eye line stays natural.",
-  ],
-  summary:
-    "Camera posture check was limited, so this is a basic face-presence estimate.",
-};
-
 function landmarksToFrame(landmarks?: PosePoint[]): PostureFrame {
   if (!landmarks || landmarks.length === 0) {
     return { detected: false };
@@ -98,7 +84,7 @@ function drawOverlay(canvas: HTMLCanvasElement, frame: PostureFrame) {
 export function PostureAnalyzer({
   onResult,
 }: {
-  onResult: (result: PostureResult) => void;
+  onResult: (result: PostureResult | null) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,7 +97,6 @@ export function PostureAnalyzer({
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
-  const [liveScoreEstimate, setLiveScoreEstimate] = useState<number | null>(null);
   const [result, setResult] = useState<PostureResult | null>(null);
 
   async function loadModel() {
@@ -146,10 +131,10 @@ export function PostureAnalyzer({
       setError(
         caught instanceof Error
           ? caught.message
-          : "Posture model could not load. Showing a safe fallback."
+          : "Posture model could not load."
       );
-      setResult(FALLBACK_POSTURE);
-      onResult(FALLBACK_POSTURE);
+      setResult(null);
+      onResult(null);
       return null;
     } finally {
       setIsModelLoading(false);
@@ -159,7 +144,6 @@ export function PostureAnalyzer({
   async function startCamera() {
     setError("");
     setProgress(0);
-    setLiveScoreEstimate(null);
     const model = await loadModel();
     if (!model) return;
 
@@ -176,13 +160,8 @@ export function PostureAnalyzer({
       }
     } catch {
       setError("Camera permission was denied or unavailable.");
-      const fallback = {
-        ...FALLBACK_POSTURE,
-        summary:
-          "Camera permission was denied, so posture coaching used a safe face-presence estimate.",
-      };
-      setResult(fallback);
-      onResult(fallback);
+      setResult(null);
+      onResult(null);
     }
   }
 
@@ -207,7 +186,8 @@ export function PostureAnalyzer({
     const canvas = canvasRef.current;
     const landmarker = landmarkerRef.current;
     if (!video || !canvas || !landmarker) {
-      onResult(FALLBACK_POSTURE);
+      setError("Camera check is not ready yet.");
+      onResult(null);
       stopCamera();
       return;
     }
@@ -229,10 +209,6 @@ export function PostureAnalyzer({
           const frame = landmarksToFrame(result.landmarks?.[0]);
           frames.push(frame);
           drawOverlay(canvas, frame);
-
-          if (frames.length % 12 === 0) {
-            setLiveScoreEstimate(scorePostureFrames(frames).score);
-          }
         } catch {
           frames.push({ detected: false });
         }
@@ -247,8 +223,15 @@ export function PostureAnalyzer({
     });
 
     const result = scorePostureFrames(frames);
-    setResult(result);
-    onResult(result);
+    if (!result) {
+      setError("Not enough face landmarks were detected. Center your face, improve lighting, and try again.");
+      setResult(null);
+      onResult(null);
+    } else {
+      setError("");
+      setResult(result);
+      onResult(result);
+    }
     setProgress(100);
     stopCamera();
   }
@@ -260,7 +243,7 @@ export function PostureAnalyzer({
         Quick camera check
       </div>
       <p className="text-xs text-muted">
-        Quick camera check for face framing, eye line, head stability, and fidgeting.
+        Quick camera check for face framing, eye contact, head stability, and fidgeting.
       </p>
 
       {active && (
@@ -280,7 +263,7 @@ export function PostureAnalyzer({
         </div>
       )}
 
-      {(analyzing || liveScoreEstimate != null) && (
+      {analyzing && (
         <div className="space-y-1">
           <div className="h-2 overflow-hidden rounded-full bg-gray-100">
             <div
@@ -289,8 +272,7 @@ export function PostureAnalyzer({
             />
           </div>
           <p className="text-xs text-muted">
-            Analyzing eye line, head stability, and camera presence…
-            {liveScoreEstimate != null ? ` Live estimate: ${liveScoreEstimate}` : ""}
+            Analyzing eye contact, head stability, and camera presence…
           </p>
         </div>
       )}
@@ -299,19 +281,14 @@ export function PostureAnalyzer({
 
       {result && (
         <div className="rounded-lg bg-gray-50 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-gray-900">Posture score</p>
-            <span className="rounded-full bg-white px-2.5 py-1 text-sm font-semibold text-brand-700 ring-1 ring-brand-200">
-              {result.score}/100
-            </span>
-          </div>
+          <p className="text-sm font-medium text-gray-900">Posture coaching</p>
           <p className="mt-2 text-sm text-gray-700">{result.summary}</p>
           {result.signals.length > 0 && (
             <div className="mt-3">
               <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Signals
+                What went well
               </p>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-gray-700">
+              <ul className="mt-1 space-y-1 text-sm text-gray-700">
                 {result.signals.map((signal) => (
                   <li key={signal}>{signal}</li>
                 ))}
@@ -321,9 +298,9 @@ export function PostureAnalyzer({
           {result.suggestions.length > 0 && (
             <div className="mt-3">
               <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Suggestions
+                Try this next
               </p>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-gray-700">
+              <ul className="mt-1 space-y-1 text-sm text-gray-700">
                 {result.suggestions.map((suggestion) => (
                   <li key={suggestion}>{suggestion}</li>
                 ))}
@@ -351,7 +328,7 @@ export function PostureAnalyzer({
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Runs locally in your browser. We only save posture scores and coaching notes,
+        Runs locally in your browser. We only save posture coaching notes,
         not webcam frames.
       </p>
     </div>

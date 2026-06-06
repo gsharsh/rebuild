@@ -22,6 +22,7 @@ interface QuestionSidebarProps {
   onGenerateMock: () => Promise<void>;
   scoredQuestionIds?: Set<string>;
   generating?: boolean;
+  inputFirst?: boolean;
 }
 
 function cleanTitle(line: string) {
@@ -82,6 +83,7 @@ export function QuestionSidebar({
   onGenerateMock,
   scoredQuestionIds = new Set(),
   generating = false,
+  inputFirst = false,
 }: QuestionSidebarProps) {
   const [customQuestion, setCustomQuestion] = useState("");
   const [adding, setAdding] = useState(false);
@@ -99,10 +101,10 @@ export function QuestionSidebar({
 
   return (
     <Card className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="shrink-0">
+      <CardHeader className="shrink-0 px-4 py-3">
         <h3 className="text-sm font-semibold">{title}</h3>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-4 py-3">
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
           {questions.length === 0 && (
             <p className="py-2 text-xs text-muted">
@@ -125,12 +127,12 @@ export function QuestionSidebar({
                 <button
                   type="button"
                   onClick={() => onSelectQuestion(q.id)}
-                  className="w-full px-3 py-2 pr-10 text-left text-sm"
+                  className="w-full px-3 py-2 pr-9 text-left text-sm"
                 >
-                  <span className="font-medium text-gray-900 line-clamp-1">
+                  <span className="line-clamp-1 text-xs font-medium text-muted">
                     {display.label}
                   </span>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted">
+                  <p className="mt-0.5 line-clamp-2 text-sm leading-5 text-gray-800">
                     {display.body}
                   </p>
                   {scoredQuestionIds.has(q.id) && (
@@ -156,6 +158,15 @@ export function QuestionSidebar({
         </div>
 
         <div className="shrink-0 space-y-2 border-t border-border bg-white pt-3">
+          {inputFirst && (
+            <QuestionInput
+              value={customQuestion}
+              onChange={setCustomQuestion}
+              placeholder={addPlaceholder}
+              onSubmit={handleAdd}
+              disabled={adding || !customQuestion.trim()}
+            />
+          )}
           <Button
             size="sm"
             className="w-full"
@@ -165,26 +176,52 @@ export function QuestionSidebar({
             <Sparkles className="mr-1 h-3 w-3" />
             {generating ? generatingLabel : generateLabel}
           </Button>
-          <div className="flex gap-1">
-            <input
-              type="text"
+          {!inputFirst && (
+            <QuestionInput
               value={customQuestion}
-              onChange={(e) => setCustomQuestion(e.target.value)}
+              onChange={setCustomQuestion}
               placeholder={addPlaceholder}
-              className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
-              onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void handleAdd()}
+              onSubmit={handleAdd}
               disabled={adding || !customQuestion.trim()}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+            />
+          )}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function QuestionInput({
+  value,
+  onChange,
+  placeholder,
+  onSubmit,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  onSubmit: () => Promise<void>;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex gap-1">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs"
+        onKeyDown={(e) => e.key === "Enter" && void onSubmit()}
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => void onSubmit()}
+        disabled={disabled}
+      >
+        <Plus className="h-3 w-3" />
+      </Button>
+    </div>
   );
 }

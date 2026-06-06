@@ -1283,13 +1283,19 @@ def enrich_practice_targets(
                 item["start_time"] = round(max(start - 0.25, 0), 2)
                 item["end_time"] = round(end + 0.35, 2)
 
-        title = item.get("title") or item.get("focus") or f"Section {index + 1}"
+        title = str(item.get("title") or item.get("focus") or f"Section {index + 1}").strip()
+        focus = str(item.get("focus") or "clearer delivery").strip()
+        demo = str(item.get("demo") or item.get("original") or "").strip()
+        cue = str(item.get("practice_cue") or "Repeat this section once more.").strip()
+        focus_sentence = ""
+        if focus and focus.lower() != title.lower():
+            focus_sentence = f"The improvement focus is: {focus}. "
         coach_text = (
             f"Practice section {index + 1}: {title}. "
             f"First, listen to your original delivery in the app. "
-            f"The improvement focus is: {item.get('focus', 'clearer delivery')}. "
-            f"Here is a stronger version: {item.get('demo', item.get('original', ''))}. "
-            f"Now repeat it. {item.get('practice_cue', '')}"
+            f"{focus_sentence}"
+            f"Here is a stronger version: {demo}. "
+            f"Now repeat it. {cue}"
         )
         section_url, section_error = coach_voice_memo(
             coach_text,

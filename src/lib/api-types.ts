@@ -101,6 +101,8 @@ export interface PostureAnalysis {
   signals: string[];
   suggestions: string[];
   summary: string;
+  framesAnalyzed?: number;
+  detectedRatio?: number;
 }
 
 export interface AnalyzeResponse {

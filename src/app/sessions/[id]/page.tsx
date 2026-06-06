@@ -8,7 +8,6 @@ import { QuestionSidebar } from "@/components/session/question-sidebar";
 import { PractisePanel } from "@/components/session/practise-panel";
 import { ResultsPanel } from "@/components/session/results/results-panel";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   createQuestion,
   deleteQuestion,
@@ -20,7 +19,6 @@ import {
 import { DEMO_QUESTION } from "@/lib/demo-data";
 import type { AnalyzeResponse, Question, Session } from "@/lib/api-types";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
-import { ArrowLeft } from "lucide-react";
 
 export default function SessionWorkspacePage() {
   const params = useParams();
@@ -228,25 +226,16 @@ export default function SessionWorkspacePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
-      <DashboardHeader />
+      <DashboardHeader
+        backHref="/dashboard"
+        backLabel="Your Sessions"
+        title={session.role}
+        subtitle={session.organisation}
+        badgeLabel={session.interview_type}
+      />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-4 sm:px-6">
-        <div className="mb-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center text-sm text-muted hover:text-gray-900"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Your Sessions
-          </Link>
-          <div className="mt-2 flex items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-900">{session.role}</h1>
-            <Badge variant="info">{session.interview_type}</Badge>
-          </div>
-          <p className="text-sm text-muted">{session.organisation}</p>
-        </div>
-
-        <div className="grid min-h-[calc(100vh-180px)] grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="lg:sticky lg:top-4 lg:col-span-3 lg:h-[calc(100vh-2rem)]">
+        <div className="grid min-h-[calc(100vh-6rem)] grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="lg:sticky lg:top-[4.5rem] lg:col-span-3 lg:h-[calc(100vh-5.5rem)]">
             <QuestionSidebar
               title={workspaceCopy.sidebarTitle}
               emptyText={workspaceCopy.emptyText}
@@ -262,6 +251,7 @@ export default function SessionWorkspacePage() {
               onGenerateMock={handleGenerateMock}
               scoredQuestionIds={scoredIds}
               generating={generating}
+              inputFirst={!workspaceCopy.isPresentationLike}
             />
           </div>
 

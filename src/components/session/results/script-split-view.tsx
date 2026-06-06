@@ -84,15 +84,6 @@ export function ScriptSplitView({ analysis }: ScriptSplitViewProps) {
           )}
         </section>
       </div>
-
-      {analysis.coaching_lesson && (
-        <div className="border-t border-border bg-gray-50 px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Coaching lesson
-          </p>
-          <p className="mt-1 text-sm leading-6 text-gray-800">{analysis.coaching_lesson}</p>
-        </div>
-      )}
     </div>
   );
 }

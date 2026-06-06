@@ -1,10 +1,10 @@
 import { ScoreCard } from "@/components/ui/score-card";
-import type { AnalyzeResponse } from "@/lib/api-types";
+import type { AnalyzeResponse, PostureAnalysis } from "@/lib/api-types";
 import type { ReactNode } from "react";
 
 interface ScoreRowProps {
   result: AnalyzeResponse;
-  postureScore?: string | number | null;
+  posture?: PostureAnalysis | null;
 }
 
 function scriptScore(changesCount: number): string {
@@ -102,10 +102,38 @@ function PaceGraph({
   );
 }
 
-export function ScoreRow({ result, postureScore }: ScoreRowProps) {
+function postureSummary(posture?: PostureAnalysis | null): { value: string; sublabel: string } {
+  if (!posture) {
+    return {
+      value: "Not checked",
+      sublabel: "Turn camera on for posture advice",
+    };
+  }
+
+  const firstSuggestion = posture.suggestions?.[0];
+  if (posture.score >= 85) {
+    return {
+      value: "Strong presence",
+      sublabel: posture.signals?.[0] ?? "Keep your eye contact steady",
+    };
+  }
+  if (posture.score >= 70) {
+    return {
+      value: "Good presence",
+      sublabel: firstSuggestion ?? "Keep your face centered and eye contact steady",
+    };
+  }
+  return {
+    value: "Needs attention",
+    sublabel: firstSuggestion ?? "Center your face and reduce head movement",
+  };
+}
+
+export function ScoreRow({ result, posture }: ScoreRowProps) {
   const wpm = result.speech_analysis?.pacing_words_per_minute;
   const changes = result.script_analysis?.changes_made?.length ?? 0;
   const tone = toneSummary(result);
+  const postureCoach = postureSummary(posture);
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -128,8 +156,8 @@ export function ScoreRow({ result, postureScore }: ScoreRowProps) {
       />
       <ScoreCard
         label="Posture"
-        value={postureScore ?? "Not used"}
-        sublabel={postureScore != null ? "Camera & presence" : "Turn camera on to score"}
+        value={postureCoach.value}
+        sublabel={postureCoach.sublabel}
         variant="muted"
       />
     </div>

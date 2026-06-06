@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { OutputCard } from "@/components/ui/output-card";
@@ -14,7 +14,7 @@ import {
   type PostureFrame,
   scorePostureFrames,
 } from "@/lib/posture/scoring";
-import { Camera, CameraOff, FlaskConical, Mic, Square, Type } from "lucide-react";
+import { Camera, CameraOff, CheckCircle2, FlaskConical, Mic, Square, Type } from "lucide-react";
 
 interface PractisePanelProps {
   sessionId: string;
@@ -33,20 +33,6 @@ const RECORD_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
 ];
-
-const CAMERA_FALLBACK_POSTURE: PostureResult = {
-  score: 70,
-  signals: [
-    "Camera was enabled for this recording",
-    "Face-landmark analysis could not complete reliably",
-  ],
-  suggestions: [
-    "Keep your face centered and well lit.",
-    "Keep your notes near camera height and reduce head movement.",
-  ],
-  summary:
-    "Camera was available, but detailed face-presence scoring was limited for this attempt.",
-};
 
 type PoseLandmarkerInstance = {
   detectForVideo: (
@@ -114,13 +100,18 @@ export function PractisePanel({
   const [recording, setRecording] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [showCameraCheck, setShowCameraCheck] = useState(false);
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [postureModelReady, setPostureModelReady] = useState(false);
+  const [postureModelLoading, setPostureModelLoading] = useState(false);
   const [error, setError] = useState("");
   const [postureData, setPostureData] = useState<PostureResult | null>(null);
+  const [lastPostureSummary, setLastPostureSummary] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<PoseLandmarkerInstance | null>(null);
   const postureRafRef = useRef<number | null>(null);
+  const postureCaptureStartedRef = useRef(false);
   const postureFramesRef = useRef<PostureFrame[]>([]);
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
@@ -141,6 +132,18 @@ export function PractisePanel({
       recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
+
+  useEffect(() => {
+    const video = previewRef.current;
+    if (!video || !previewStream) return;
+
+    video.srcObject = previewStream;
+    video.muted = true;
+    video.playsInline = true;
+    void video.play().catch(() => {
+      // Browser may wait until enough metadata arrives; onCanPlay retries play.
+    });
+  }, [previewStream, recording]);
 
   function loadDemo() {
     setText(DEMO_ANSWER);
@@ -184,66 +187,112 @@ export function PractisePanel({
       cancelAnimationFrame(postureRafRef.current);
       postureRafRef.current = null;
     }
+    postureCaptureStartedRef.current = false;
     recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
     recordingStreamRef.current = null;
+    setPreviewStream(null);
     if (previewRef.current) {
       previewRef.current.srcObject = null;
     }
   }
 
-  async function loadPracticePoseModel() {
+  const loadPracticePoseModel = useCallback(async () => {
     if (landmarkerRef.current) return landmarkerRef.current;
-    const vision = (await import("@mediapipe/tasks-vision")) as PoseLandmarkerModule;
-    const fileset = await vision.FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-    );
-    const baseOptions = {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-    };
-    let landmarker: PoseLandmarkerInstance;
+    setPostureModelLoading(true);
     try {
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { ...baseOptions, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
-    } catch {
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { ...baseOptions, delegate: "CPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
+      const vision = (await import("@mediapipe/tasks-vision")) as PoseLandmarkerModule;
+      const fileset = await vision.FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+      const baseOptions = {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+      };
+      let landmarker: PoseLandmarkerInstance;
+      try {
+        landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: { ...baseOptions, delegate: "GPU" },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+      } catch {
+        landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: { ...baseOptions, delegate: "CPU" },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+      }
+      landmarkerRef.current = landmarker;
+      setPostureModelReady(true);
+      return landmarker;
+    } catch (caught) {
+      setPostureModelReady(false);
+      throw caught;
+    } finally {
+      setPostureModelLoading(false);
     }
-    landmarkerRef.current = landmarker;
-    return landmarker;
-  }
+  }, []);
 
-  async function startRecordingPostureCapture() {
+  const startRecordingPostureCapture = useCallback(() => {
     if (!cameraEnabled || !previewRef.current) return;
+    const landmarker = landmarkerRef.current;
+    if (!landmarker) return;
+    postureCaptureStartedRef.current = true;
     postureFramesRef.current = [];
-    try {
-      const landmarker = await loadPracticePoseModel();
-      const sample = () => {
-        const video = previewRef.current;
-        if (!video) return;
+    let lastSampleAt = 0;
+    const sample = () => {
+      const video = previewRef.current;
+      if (!video) return;
+      const now = performance.now();
+      if (now - lastSampleAt >= 150) {
+        lastSampleAt = now;
         try {
-          const result = landmarker.detectForVideo(video, performance.now());
+          const result = landmarker.detectForVideo(video, now);
           postureFramesRef.current.push(landmarksToFrame(result.landmarks?.[0]));
         } catch {
           postureFramesRef.current.push({ detected: false });
         }
-        postureRafRef.current = requestAnimationFrame(sample);
-      };
+      }
       postureRafRef.current = requestAnimationFrame(sample);
-    } catch {
-      setPostureData(CAMERA_FALLBACK_POSTURE);
-      setError("Recording will continue, but live posture analysis could not load.");
+    };
+    postureRafRef.current = requestAnimationFrame(sample);
+  }, [cameraEnabled]);
+
+  useEffect(() => {
+    if (!recording || !cameraEnabled || !previewStream || postureCaptureStartedRef.current) {
+      return;
     }
-  }
+
+    let cancelled = false;
+    async function loadAndStartPosture() {
+      try {
+        await loadPracticePoseModel();
+        if (!cancelled) {
+          startRecordingPostureCapture();
+        }
+      } catch {
+        if (!cancelled) {
+          setPostureModelReady(false);
+          setError("Camera preview is working, but posture analysis could not load. This recording will still submit speech and video.");
+        }
+      }
+    }
+
+    void loadAndStartPosture();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    recording,
+    cameraEnabled,
+    previewStream,
+    loadPracticePoseModel,
+    startRecordingPostureCapture,
+  ]);
 
   async function startRecording() {
     try {
+      setError("");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: cameraEnabled
@@ -251,10 +300,8 @@ export function PractisePanel({
           : false,
       });
       recordingStreamRef.current = stream;
-      if (cameraEnabled && previewRef.current) {
-        previewRef.current.srcObject = stream;
-        await previewRef.current.play();
-        void startRecordingPostureCapture();
+      if (cameraEnabled) {
+        setPreviewStream(stream);
       }
 
       const supportedMimeType = RECORD_MIME_TYPES.find((type) =>
@@ -278,10 +325,15 @@ export function PractisePanel({
           cameraEnabled && postureFramesRef.current.length > 0
             ? scorePostureFrames(postureFramesRef.current)
             : cameraEnabled
-              ? postureData ?? CAMERA_FALLBACK_POSTURE
-              : postureData;
+              ? postureData
+              : null;
         if (recordingPosture) {
           setPostureData(recordingPosture);
+          setLastPostureSummary(recordingPosture.summary);
+        } else if (cameraEnabled) {
+          setPostureData(null);
+          setLastPostureSummary("");
+          setError("Posture advice was not generated because the camera did not capture enough face landmarks.");
         }
         cleanupRecordingStream();
         setLoading(true);
@@ -294,7 +346,7 @@ export function PractisePanel({
             blob,
             duration,
             filename,
-            cameraEnabled ? recordingPosture : null
+            recordingPosture
           );
           onAnalyzeComplete(result);
         } catch {
@@ -323,8 +375,8 @@ export function PractisePanel({
       };
       mediaRecorderRef.current = recorder;
       startTimeRef.current = Date.now();
-      recorder.start();
       setRecording(true);
+      recorder.start();
     } catch {
       cleanupRecordingStream();
       setError(cameraEnabled ? "Camera or microphone access was denied." : "Microphone access was denied.");
@@ -404,26 +456,24 @@ export function PractisePanel({
       )}
 
       {mode === "audio" && (
-        <div className="rounded-xl border border-border bg-white px-5 py-8 text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+        <div className="rounded-xl border border-border bg-white px-5 py-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
             {cameraEnabled ? <Camera className="h-9 w-9" /> : <Mic className="h-9 w-9" />}
           </div>
-          <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted">
-            {audioHelp}
-          </p>
-          <p className="mt-2 text-sm text-gray-700">
+          <p className="mx-auto max-w-xl text-sm leading-relaxed text-gray-700">
             {cameraEnabled
-              ? "Camera is on: submit one recording for speech, emotion, and face-presence coaching."
-              : "Audio-only is fastest. Turn camera on when you want posture and eye-line feedback too."}
+              ? "Record with camera for speech, emotion, and posture coaching."
+              : audioHelp}
           </p>
 
-          <div className="mt-6 flex flex-col items-center gap-3">
+          <div className="mt-5 flex flex-col items-center gap-3">
             <div className="flex flex-wrap justify-center gap-2">
               <Button
                 variant={cameraEnabled ? "secondary" : "ghost"}
                 onClick={() => {
                   setCameraEnabled((current) => !current);
                   setShowCameraCheck(false);
+                  setPostureData(null);
                 }}
                 disabled={recording || loading}
               >
@@ -451,38 +501,31 @@ export function PractisePanel({
             </div>
 
             {cameraEnabled && (
-              <div className="w-full max-w-3xl space-y-3">
+              <div className="w-full space-y-3">
                 {recording && (
                   <div className="overflow-hidden rounded-xl bg-black">
                     <video
                       ref={previewRef}
-                      className="max-h-72 w-full object-cover"
+                      className="h-[min(58vh,560px)] w-full object-cover"
                       playsInline
                       muted
+                      autoPlay
+                      onCanPlay={() => {
+                        void previewRef.current?.play().catch(() => undefined);
+                      }}
                     />
                   </div>
                 )}
                 {!recording && (
-                  <div className="rounded-xl border border-border bg-gray-50 p-4 text-left">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          Posture coach armed
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-muted">
-                          Your next camera recording will score face framing, eye line,
-                          head stability, and fidgeting.
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">
-                        {postureData ? `${postureData.score}/100 ready` : "Ready on record"}
-                      </span>
-                    </div>
-                    {postureData && (
-                      <p className="mt-3 text-sm leading-6 text-gray-700">
-                        {postureData.summary}
-                      </p>
-                    )}
+                  <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                    <CheckCircle2 className="h-4 w-4 text-brand-600" />
+                    <span>
+                      {postureModelLoading
+                        ? "Preparing posture coach..."
+                        : postureModelReady
+                          ? "Posture coach ready"
+                          : "Posture coach starts with your recording"}
+                    </span>
                   </div>
                 )}
                 {!recording && showCameraCheck && (
@@ -504,9 +547,9 @@ export function PractisePanel({
             )}
           </div>
 
-          {postureData && cameraEnabled && !recording && (
+          {lastPostureSummary && cameraEnabled && !recording && (
             <p className="mt-4 text-xs text-brand-700">
-              Posture check ready: {postureData.score}/100 will be included with your next recording.
+              Last posture note: {lastPostureSummary}
             </p>
           )}
           {loading && <p className="mt-4 text-sm text-muted">Transcribing and analyzing…</p>}

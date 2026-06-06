@@ -11,7 +11,7 @@ import { ArrowRight, Check, Copy, Menu, Pencil, Trash2, X } from "lucide-react";
 
 interface SessionCardProps {
   session: Session;
-  questionCount?: number;
+  itemCount?: number;
   onRename?: (
     id: string,
     payload: { role: string; organisation: string }
@@ -21,7 +21,7 @@ interface SessionCardProps {
 
 export function SessionCard({
   session,
-  questionCount = 0,
+  itemCount = 0,
   onRename,
   onDelete,
 }: SessionCardProps) {
@@ -31,6 +31,14 @@ export function SessionCard({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const isPresentationLike =
+    session.interview_type === "Class Presentation" ||
+    session.interview_type === "Hackathon Pitch";
+  const countLabel = isPresentationLike
+    ? session.interview_type === "Hackathon Pitch"
+      ? "pitch section"
+      : "presentation attempt"
+    : "question";
 
   async function saveEdit() {
     if (!role.trim() || !organisation.trim() || !onRename) return;
@@ -152,7 +160,7 @@ export function SessionCard({
           </>
         )}
         <p className="mt-3 text-xs text-muted">
-          {questionCount} question{questionCount !== 1 ? "s" : ""}
+          {itemCount} {countLabel}{itemCount !== 1 ? "s" : ""}
         </p>
         {message && <p className="mt-2 truncate text-xs text-brand-700">{message}</p>}
         <div className="mt-auto pt-4">

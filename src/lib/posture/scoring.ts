@@ -23,6 +23,8 @@ export type PostureResult = {
   signals: string[];
   suggestions: string[];
   summary: string;
+  framesAnalyzed?: number;
+  detectedRatio?: number;
 };
 
 export function clamp(value: number, min: number, max: number) {
@@ -59,30 +61,15 @@ function frameMidpoint(a?: PosePoint, b?: PosePoint): PosePoint | undefined {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-function fallbackResult(reason: string): PostureResult {
-  return {
-    score: 70,
-    signals: [
-      "Camera check could not confidently detect face landmarks",
-      "Basic camera presence was available",
-    ],
-    suggestions: [
-      "Keep your face well lit and centered in the camera frame.",
-      "Place notes near camera height so your eye line stays steady.",
-    ],
-    summary: `${reason} This is a basic camera-presence estimate, not a full delivery-presence score.`,
-  };
-}
-
-export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
+export function scorePostureFrames(frames: PostureFrame[]): PostureResult | null {
   if (frames.length === 0) {
-    return fallbackResult("No camera frames were available.");
+    return null;
   }
 
   const detectedFrames = frames.filter((frame) => frame.detected);
   const detectedRatio = detectedFrames.length / frames.length;
   if (detectedRatio < 0.25) {
-    return fallbackResult("The camera could not reliably find your pose.");
+    return null;
   }
 
   let score = 100;
@@ -105,6 +92,8 @@ export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
   const faceMidXs: number[] = [];
   const faceMidYs: number[] = [];
   let faceAngleWarnings = 0;
+  let gazeAwayFrames = 0;
+  let gazeMeasuredFrames = 0;
 
   for (const frame of detectedFrames) {
     const nose = safePoint(frame.nose);
@@ -133,7 +122,12 @@ export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
       faceVisibilityScores.push((getVisibility(leftEye) + getVisibility(rightEye)) / 2);
       eyeDropouts.push(0);
       if (nose && eyeMid) {
-        gazeOffsets.push(Math.abs(nose.x - eyeMid.x));
+        const gazeOffset = Math.abs(nose.x - eyeMid.x);
+        gazeOffsets.push(gazeOffset);
+        gazeMeasuredFrames += 1;
+        if (gazeOffset > 0.028) {
+          gazeAwayFrames += 1;
+        }
       }
     } else {
       eyeDropouts.push(1);
@@ -164,11 +158,11 @@ export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
   } else if (headTilt <= 0.055) {
     score -= 10;
     signals.push("Head tilt was slightly uneven");
-    suggestions.push("Level your laptop or your head so your eye line is straighter.");
+    suggestions.push("Level your laptop or your head so your eye contact looks steadier.");
   } else {
     score -= 16;
     signals.push("Head tilt was noticeably uneven");
-    suggestions.push("Straighten your head before starting, then keep your eye line level.");
+    suggestions.push("Straighten your head before starting, then keep your eye contact steady.");
   }
 
   const centerOffset = average(centerOffsets);
@@ -188,18 +182,20 @@ export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
   }
 
   const gazeOffset = average(gazeOffsets);
-  if (gazeOffsets.length > 0 && gazeOffset > 0.06) {
-    score -= 10;
-    signals.push("Eye-line proxy suggested you looked away from the lens");
-    suggestions.push("Keep notes beside the camera so your gaze returns to the lens quickly.");
+  const gazeAwayRatio = gazeMeasuredFrames > 0 ? gazeAwayFrames / gazeMeasuredFrames : 0;
+  if (gazeOffsets.length > 0 && (gazeOffset > 0.038 || gazeAwayRatio > 0.18)) {
+    score -= gazeAwayRatio > 0.35 ? 20 : 14;
+    signals.push("Eye contact drifted away from the camera during parts of the take");
+    suggestions.push("Put notes close to the webcam and return your eyes to the lens at the end of each sentence.");
   } else if (gazeOffsets.length > 0) {
-    signals.push("Eye line stayed close to camera-facing");
+    signals.push("Eye contact mostly stayed near the camera");
   }
 
-  if (faceAngleWarnings / detectedFrames.length > 0.35) {
-    score -= 10;
-    signals.push("Face angle suggested you may have looked away repeatedly");
-    suggestions.push("Keep notes near camera height so your eye line stays natural.");
+  const faceAngleWarningRatio = faceAngleWarnings / detectedFrames.length;
+  if (faceAngleWarningRatio > 0.15) {
+    score -= faceAngleWarningRatio > 0.4 ? 16 : 10;
+    signals.push("Face angle changed often, which can read as looking away");
+    suggestions.push("Keep notes near camera height so your eye contact stays natural.");
   } else {
     signals.push("Camera-facing angle looked steady");
   }
@@ -227,20 +223,22 @@ export function scorePostureFrames(frames: PostureFrame[]): PostureResult {
   const finalScore = clamp(Math.round(score), 40, 100);
   if (suggestions.length === 0) {
     suggestions.push("Keep this steady face framing during your answer.");
-    suggestions.push("Keep notes near camera height so your eye line stays natural.");
+    suggestions.push("Keep notes near camera height so your eye contact stays natural.");
   }
 
   const summary =
     finalScore >= 85
-      ? "Strong camera presence. Your face framing, eye line, and head stability looked presentation-ready."
+      ? "Strong camera presence. Your face framing, eye contact, and head stability looked presentation-ready."
       : finalScore >= 70
-        ? "Good camera presence. A few small face-framing and eye-line changes will make you look more confident."
-        : "Camera check found presentation-presence issues. Center your face, reduce fidgeting, and keep your eye line near the lens.";
+        ? "Good camera presence. A few small face-framing and eye-contact changes will make you look more confident."
+        : "Camera check found presentation-presence issues. Center your face, reduce fidgeting, and keep your eyes near the lens.";
 
   return {
     score: finalScore,
     signals: Array.from(new Set(signals)).slice(0, 5),
     suggestions: Array.from(new Set(suggestions)).slice(0, 4),
     summary,
+    framesAnalyzed: frames.length,
+    detectedRatio: Number(detectedRatio.toFixed(2)),
   };
 }
