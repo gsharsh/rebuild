@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { AnalyzeResponse } from "@/lib/api-types";
+import type { AnalyzeResponse, SectionPracticeResult } from "@/lib/api-types";
+import { analyzeSectionPractice } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { Play, Volume2 } from "lucide-react";
+import { Mic, Play, Square, Volume2 } from "lucide-react";
 
 type CoachTab = "speech" | "delivery" | "lesson";
 
@@ -27,7 +28,15 @@ function PracticeTargetCard({
 }) {
   const originalAudioRef = useRef<HTMLAudioElement>(null);
   const coachAudioRef = useRef<HTMLAudioElement>(null);
+  const retryCoachAudioRef = useRef<HTMLAudioElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startTimeRef = useRef<number>(0);
   const [active, setActive] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [practiceResult, setPracticeResult] = useState<SectionPracticeResult | null>(null);
+  const [error, setError] = useState("");
 
   const hasOriginalClip =
     recordingUrl && target.start_time != null && target.end_time != null;
@@ -41,6 +50,64 @@ function PracticeTargetCard({
 
   async function playCoachDemo() {
     const audio = coachAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    await audio.play();
+  }
+
+  async function startPracticeRecording() {
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const supportedMimeTypes = ["audio/wav", "audio/webm;codecs=opus", "audio/webm"];
+      const mimeType = supportedMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type)
+      );
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        const recordedType = recorder.mimeType || mimeType || "audio/webm";
+        const extension = recordedType.includes("wav") ? "wav" : "webm";
+        const blob = new Blob(chunksRef.current, { type: recordedType });
+        const duration = (Date.now() - startTimeRef.current) / 1000;
+        stream.getTracks().forEach((track) => track.stop());
+        setAnalyzing(true);
+        try {
+          const result = await analyzeSectionPractice(
+            target as unknown as Record<string, unknown>,
+            blob,
+            duration,
+            `section-practice.${extension}`
+          );
+          setPracticeResult(result);
+        } catch (caught) {
+          setError(caught instanceof Error ? caught.message : "Could not analyze this retry.");
+        } finally {
+          setAnalyzing(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      startTimeRef.current = Date.now();
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setError("Microphone access denied. Try again after enabling microphone access.");
+    }
+  }
+
+  function stopPracticeRecording() {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  }
+
+  async function playRetryCoach() {
+    const audio = retryCoachAudioRef.current;
     if (!audio) return;
     audio.currentTime = 0;
     await audio.play();
@@ -88,6 +155,91 @@ function PracticeTargetCard({
               <Volume2 className="h-4 w-4" />
               Play coach demo
             </button>
+          </div>
+
+          <div className="rounded-lg border border-brand-200 bg-white p-3">
+            <p className="font-medium text-gray-900">Practice this section</p>
+            <p className="mt-1 text-sm text-gray-600">
+              Record only the improved version below. Speak it like the coach demo,
+              then get fresh feedback for this drill.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {recording ? (
+                <button
+                  type="button"
+                  onClick={stopPracticeRecording}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white"
+                >
+                  <Square className="h-4 w-4" />
+                  Stop & evaluate
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void startPracticeRecording()}
+                  disabled={analyzing}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  <Mic className="h-4 w-4" />
+                  {practiceResult ? "Practice again" : "Practice this section"}
+                </button>
+              )}
+              {practiceResult?.coach_audio_url && (
+                <button
+                  type="button"
+                  onClick={() => void playRetryCoach()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-gray-700"
+                >
+                  <Volume2 className="h-4 w-4" />
+                  Play retry feedback
+                </button>
+              )}
+            </div>
+            {analyzing && (
+              <p className="mt-2 text-sm text-muted">Evaluating this section…</p>
+            )}
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            {practiceResult && (
+              <div className="mt-3 space-y-2 rounded-md bg-gray-50 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-gray-900">
+                    {practiceResult.status === "improved"
+                      ? "Improved"
+                      : "Keep practicing"}
+                  </p>
+                  {practiceResult.score != null && (
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-700">
+                      {practiceResult.score}/100
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs uppercase tracking-wide text-muted">
+                  Your retry
+                </p>
+                <p className="text-gray-700">{practiceResult.transcript}</p>
+                {practiceResult.strength && (
+                  <p className="text-sm text-emerald-700">
+                    {practiceResult.strength}
+                  </p>
+                )}
+                <p className="text-sm text-gray-700">{practiceResult.feedback}</p>
+                <p className="rounded-md bg-white px-2 py-1 text-sm text-gray-700">
+                  Next: {practiceResult.next_cue}
+                </p>
+                {practiceResult.coach_audio_error && (
+                  <p className="text-xs text-amber-700">
+                    {practiceResult.coach_audio_error}
+                  </p>
+                )}
+              </div>
+            )}
+            {practiceResult?.coach_audio_url && (
+              <audio
+                ref={retryCoachAudioRef}
+                src={practiceResult.coach_audio_url}
+                className="hidden"
+              />
+            )}
           </div>
 
           {recordingUrl && (
@@ -181,11 +333,18 @@ export function CoachTabs({ result, isDemo }: CoachTabsProps) {
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-muted">Fillers</p>
                   <p className="font-medium">
-                    {speech.filler_count}
+                    {speech.filler_count === 0 ? "None detected" : speech.filler_count}
                     {speech.filler_per_minute != null
-                      ? ` / ${speech.filler_per_minute}/min`
+                      ? speech.filler_count === 0
+                        ? ""
+                        : ` / ${speech.filler_per_minute}/min`
                       : ""}
                   </p>
+                  {speech.hesitation_markers_detected?.length > 0 && (
+                    <p className="mt-1 text-xs text-muted">
+                      {speech.hesitation_markers_detected.slice(0, 4).join(", ")}
+                    </p>
+                  )}
                 </div>
               )}
               {speech?.pace_label && (

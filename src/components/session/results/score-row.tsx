@@ -1,5 +1,6 @@
 import { ScoreCard } from "@/components/ui/score-card";
 import type { AnalyzeResponse } from "@/lib/api-types";
+import type { ReactNode } from "react";
 
 interface ScoreRowProps {
   result: AnalyzeResponse;
@@ -13,25 +14,47 @@ function scriptScore(changesCount: number): string {
   return "Needs work";
 }
 
-function toneSummary(result: AnalyzeResponse): { value: string; sublabel: string } {
+function formatToneLabel(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function ToneBadges({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return <span>—</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.slice(0, 3).map((tag) => (
+        <span
+          key={tag}
+          className="rounded-full bg-white/80 px-2.5 py-1 text-sm font-semibold text-gray-900 ring-1 ring-brand-200"
+        >
+          {formatToneLabel(tag)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function toneSummary(result: AnalyzeResponse): { value: ReactNode; sublabel: string } {
   const valence = result.speech_analysis?.valence;
   const tags = valence?.normalizedTags ?? [];
   const focus = valence?.primaryFocus;
 
   if (focus) {
     return {
-      value: tags.length > 0 ? tags.slice(0, 3).join(", ") : focus,
-      sublabel: focus
-        .split(" ")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
+      value: <ToneBadges tags={tags.length > 0 ? tags : [focus]} />,
+      sublabel: `Focus: ${formatToneLabel(focus)}`,
     };
   }
 
   if (tags.length > 0) {
     return {
-      value: tags[0].replaceAll("_", " "),
-      sublabel: tags.slice(1, 4).join(", ") || "Detected tone",
+      value: <ToneBadges tags={tags} />,
+      sublabel: "Detected from voice tone",
     };
   }
 
@@ -105,8 +128,8 @@ export function ScoreRow({ result, postureScore }: ScoreRowProps) {
       />
       <ScoreCard
         label="Posture"
-        value={postureScore ?? "—"}
-        sublabel="Camera & presence"
+        value={postureScore ?? "Not used"}
+        sublabel={postureScore != null ? "Camera & presence" : "Turn camera on to score"}
         variant="muted"
       />
     </div>

@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   createQuestion,
+  deleteQuestion,
+  generateSessionSections,
   getQuestionAnswers,
   getSession,
   getSessionQuestions,
@@ -100,6 +102,8 @@ export default function SessionWorkspacePage() {
               (latest.speech_analysis as AnalyzeResponse["speech_analysis"])
                 ?.coach_audio_error ?? null,
             recording_url: latest.video_url,
+            posture_analysis:
+              (latest.posture_analysis as AnalyzeResponse["posture_analysis"]) ?? null,
           });
           setIsDemo(false);
         } else {
@@ -127,6 +131,14 @@ export default function SessionWorkspacePage() {
   async function handleGenerateMock() {
     setGenerating(true);
     try {
+      if (session && workspaceCopy.isPresentationLike) {
+        const generated = await generateSessionSections(sessionId);
+        setQuestions((prev) => [...prev, ...generated]);
+        setActiveQuestionId(generated[0]?.id ?? null);
+        setAnalyzeResult(null);
+        return;
+      }
+
       const prompt = session
         ? workspaceCopy.defaultPrompt(session)
         : DEMO_QUESTION;
@@ -153,6 +165,26 @@ export default function SessionWorkspacePage() {
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleDeleteQuestion(id: string) {
+    const shouldDelete = window.confirm("Delete this section and its saved practice attempts?");
+    if (!shouldDelete) return;
+
+    await deleteQuestion(id);
+    setQuestions((prev) => {
+      const next = prev.filter((q) => q.id !== id);
+      if (activeQuestionId === id) {
+        setActiveQuestionId(next.length > 0 ? next[next.length - 1].id : null);
+        setAnalyzeResult(null);
+      }
+      return next;
+    });
+    setScoredIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }
 
   function handleAnalyzeComplete(result: AnalyzeResponse, demo = false) {
@@ -214,7 +246,7 @@ export default function SessionWorkspacePage() {
         </div>
 
         <div className="grid min-h-[calc(100vh-180px)] grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-3">
+          <div className="lg:sticky lg:top-4 lg:col-span-3 lg:h-[calc(100vh-2rem)]">
             <QuestionSidebar
               title={workspaceCopy.sidebarTitle}
               emptyText={workspaceCopy.emptyText}
@@ -226,6 +258,7 @@ export default function SessionWorkspacePage() {
               activeQuestionId={activeQuestionId}
               onSelectQuestion={setActiveQuestionId}
               onAddQuestion={handleAddQuestion}
+              onDeleteQuestion={handleDeleteQuestion}
               onGenerateMock={handleGenerateMock}
               scoredQuestionIds={scoredIds}
               generating={generating}

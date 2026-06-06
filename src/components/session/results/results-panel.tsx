@@ -29,7 +29,7 @@ export function ResultsPanel({ result, isDemo, loading }: ResultsPanelProps) {
 
   return (
     <div className="space-y-4">
-      <ScoreRow result={result} />
+      <ScoreRow result={result} postureScore={result.posture_analysis?.score ?? null} />
       <ScriptDisplay transcript={result.transcript} changes={changes} />
       <ScriptSplitView analysis={result.script_analysis} />
       <AudioPlayer

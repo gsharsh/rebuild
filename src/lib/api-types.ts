@@ -96,6 +96,13 @@ export interface Answer {
   created_at: string;
 }
 
+export interface PostureAnalysis {
+  score: number;
+  signals: string[];
+  suggestions: string[];
+  summary: string;
+}
+
 export interface AnalyzeResponse {
   answer_id: string;
   transcript: string;
@@ -104,6 +111,19 @@ export interface AnalyzeResponse {
   coach_audio_url: string | null;
   coach_audio_error?: string | null;
   recording_url?: string | null;
+  posture_analysis?: PostureAnalysis | null;
+}
+
+export interface SectionPracticeResult {
+  transcript: string;
+  score: number;
+  status: "improved" | "keep_practicing" | string;
+  strength?: string;
+  feedback: string;
+  next_cue: string;
+  speech_analysis: SpeechAnalysis;
+  coach_audio_url: string | null;
+  coach_audio_error?: string | null;
 }
 
 export interface CreateSessionPayload {
@@ -140,7 +160,7 @@ export interface QuestionWithAnswers extends Question {
   answers?: Answer[];
 }
 
-export type AnswerMode = "text" | "audio" | "native" | "video";
+export type AnswerMode = "text" | "audio";
 
 export const INTERVIEW_TYPES = [
   "Job Interview",

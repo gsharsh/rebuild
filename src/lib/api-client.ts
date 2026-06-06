@@ -5,7 +5,9 @@ import type {
   Answer,
   CreateQuestionPayload,
   CreateSessionPayload,
+  PostureAnalysis,
   Question,
+  SectionPracticeResult,
   Session,
   UpdateSessionPayload,
 } from "@/lib/api-types";
@@ -118,6 +120,18 @@ export async function createQuestion(
   });
 }
 
+export async function generateSessionSections(sessionId: string): Promise<Question[]> {
+  return apiFetch<Question[]>(`/api/sessions/${sessionId}/generate-sections`, {
+    method: "POST",
+  });
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  return apiFetch<void>(`/api/questions/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getQuestionAnswers(
   questionId: string
 ): Promise<Answer[]> {
@@ -138,7 +152,8 @@ export async function analyzeAudio(
   sessionId: string,
   file: Blob,
   durationSeconds: number,
-  filename = "recording.webm"
+  filename = "recording.webm",
+  postureAnalysis?: PostureAnalysis | null
 ): Promise<AnalyzeResponse> {
   const supabase = createClient();
   const {
@@ -150,6 +165,9 @@ export async function analyzeAudio(
   formData.append("session_id", sessionId);
   formData.append("duration_seconds", String(durationSeconds));
   formData.append("file", file, filename);
+  if (postureAnalysis) {
+    formData.append("posture_analysis", JSON.stringify(postureAnalysis));
+  }
 
   const headers: HeadersInit = {};
   if (session?.access_token) {
@@ -174,4 +192,45 @@ export async function analyzeAudio(
   }
 
   return res.json() as Promise<AnalyzeResponse>;
+}
+
+export async function analyzeSectionPractice(
+  target: Record<string, unknown>,
+  file: Blob,
+  durationSeconds: number,
+  filename = "section-practice.webm"
+): Promise<SectionPracticeResult> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const formData = new FormData();
+  formData.append("target_json", JSON.stringify(target));
+  formData.append("duration_seconds", String(durationSeconds));
+  formData.append("file", file, filename);
+
+  const headers: HeadersInit = {};
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
+  const res = await fetch(`${API_URL}/api/answers/analyze-section-practice`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      message = body.detail ?? body.error ?? body.message ?? message;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  return res.json() as Promise<SectionPracticeResult>;
 }

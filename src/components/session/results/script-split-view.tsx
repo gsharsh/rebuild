@@ -1,64 +1,96 @@
 import type { ScriptAnalysis } from "@/lib/api-types";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 interface ScriptSplitViewProps {
   analysis: ScriptAnalysis;
 }
 
 export function ScriptSplitView({ analysis }: ScriptSplitViewProps) {
+  const changes = analysis.changes_made ?? [];
+
   return (
-    <div className="rounded-xl border border-border bg-white overflow-hidden">
-      <div className="border-b border-border bg-gray-50 px-4 py-2">
-        <h4 className="text-sm font-semibold text-gray-900">Improve script</h4>
-        <p className="text-xs text-muted">Grammarly-style before & after coaching</p>
+    <div className="overflow-hidden rounded-xl border border-border bg-white">
+      <div className="border-b border-border bg-gray-50 px-5 py-4">
+        <h4 className="text-base font-semibold text-gray-900">Improve script</h4>
+        <p className="mt-1 text-sm text-muted">
+          Cleaner wording for a speech that is easier to deliver out loud.
+        </p>
       </div>
-      <div className="grid divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-        <div className="p-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
-            Original issues
-          </p>
-          <ul className="space-y-3">
-            {analysis.changes_made.map((change, i) => (
-              <li key={i} className="text-sm">
-                <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-800 line-through">
-                  {change.original}
-                </span>
-                <p className="mt-1 text-xs text-muted">{change.reason}</p>
-              </li>
-            ))}
-            {analysis.changes_made.length === 0 && (
-              <li className="text-sm text-muted">No changes needed — great script!</li>
-            )}
-          </ul>
-        </div>
-        <div className="bg-brand-50/30 p-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-brand-700">
-            Improved version
-          </p>
-          <p className="text-sm leading-relaxed text-gray-800">
+
+      <div className="space-y-5 p-5">
+        <section className="rounded-xl bg-brand-50/60 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-brand-700">
+            <CheckCircle2 className="h-4 w-4" />
+            Improved speaking version
+          </div>
+          <p className="whitespace-pre-wrap break-words text-base leading-8 text-gray-900">
             {analysis.improved_script}
           </p>
-          {analysis.changes_made.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {analysis.changes_made.map((change, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs">
-                  <span className="rounded bg-red-50 px-1 text-red-700 line-through shrink-0">
-                    {change.original}
-                  </span>
-                  <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-muted" />
-                  <span className="rounded bg-green-50 px-1 text-green-800">
-                    {change.fixed}
-                  </span>
-                </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-muted">
+                Recommended edits
+              </p>
+              <p className="mt-1 text-sm text-gray-600">
+                Sentence-level changes that improve clarity, rhythm, and confidence.
+              </p>
+            </div>
+            {changes.length > 0 && (
+              <span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                {changes.length} edit{changes.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {changes.length === 0 ? (
+            <div className="rounded-lg border border-border bg-gray-50 p-4 text-sm text-muted">
+              No script changes needed. Keep practicing the delivery.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {changes.map((change, index) => (
+                <article
+                  key={`${change.original}-${index}`}
+                  className="rounded-xl border border-border bg-white p-4 shadow-sm"
+                >
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
+                        Before
+                      </p>
+                      <p className="whitespace-pre-wrap break-words rounded-lg bg-red-50 px-3 py-2 text-sm leading-6 text-red-900 line-through decoration-red-700/70">
+                        {change.original}
+                      </p>
+                    </div>
+                    <div className="hidden items-center justify-center text-muted lg:flex">
+                      <ArrowRight className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-700">
+                        Better for delivery
+                      </p>
+                      <p className="whitespace-pre-wrap break-words rounded-lg bg-green-50 px-3 py-2 text-sm leading-6 text-green-900">
+                        {change.fixed}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-gray-600">{change.reason}</p>
+                </article>
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
+
       {analysis.coaching_lesson && (
-        <div className="border-t border-border bg-brand-50 px-4 py-3">
-          <p className="text-xs font-medium text-brand-800">Coaching lesson</p>
-          <p className="mt-1 text-sm text-brand-900">{analysis.coaching_lesson}</p>
+        <div className="border-t border-border bg-gray-50 px-5 py-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Coaching lesson
+          </p>
+          <p className="mt-1 text-sm leading-6 text-gray-800">{analysis.coaching_lesson}</p>
         </div>
       )}
     </div>

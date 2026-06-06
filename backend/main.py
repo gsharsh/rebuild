@@ -116,11 +116,165 @@ class QuestionCreate(BaseModel):
     source: Optional[str] = "generated"
 
 
+def fallback_presentation_sections(session: dict[str, Any]) -> list[dict[str, str]]:
+    topic = session.get("role") or "your presentation"
+    audience = session.get("organisation") or "your audience"
+    context = session.get("context") or "your main points"
+    return [
+        {
+            "title": "Opening & topic setup",
+            "prompt": f"Practise the opening for {topic}. Introduce the topic clearly for {audience} and set up what the audience will learn. Context: {context}",
+        },
+        {
+            "title": "Main idea",
+            "prompt": f"Practise explaining the first main idea in your {topic} presentation with simple, listener-friendly wording. Context: {context}",
+        },
+        {
+            "title": "Personal example",
+            "prompt": f"Practise the personal example or story that makes your {topic} presentation more engaging for {audience}. Context: {context}",
+        },
+        {
+            "title": "Closing takeaway",
+            "prompt": f"Practise the closing for {topic}. End with a clear takeaway and confident final sentence for {audience}. Context: {context}",
+        },
+    ]
+
+
+def generate_presentation_sections(session: dict[str, Any]) -> list[dict[str, str]]:
+    fallback = fallback_presentation_sections(session)
+    if not gemini_client:
+        return fallback
+
+    system_instruction = """
+You create named rehearsal sections for SpeakReady.
+Return JSON only:
+{
+  "sections": [
+    {"title": "Short specific section title", "prompt": "Practice instruction for this section"}
+  ]
+}
+Rules:
+- Create 4 to 6 sections.
+- Titles must be specific to the user's topic, not Part 1 or generic labels.
+- Use the user's topic, audience, and context.
+- Prompts should tell the user exactly what to practise in that section.
+- Do not invent facts outside the provided context.
+"""
+    prompt = {
+        "session_type": session.get("interview_type"),
+        "topic_or_role": session.get("role"),
+        "audience_or_organisation": session.get("organisation"),
+        "context": session.get("context"),
+    }
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.35,
+    )
+    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+        try:
+            response = gemini_client.models.generate_content(
+                model=model,
+                contents=json.dumps(prompt),
+                config=config,
+            )
+            data = safe_json(response.text)
+            sections = data.get("sections")
+            if isinstance(sections, list):
+                cleaned: list[dict[str, str]] = []
+                for item in sections[:6]:
+                    if not isinstance(item, dict):
+                        continue
+                    title = str(item.get("title") or "").strip()
+                    section_prompt = str(item.get("prompt") or "").strip()
+                    if title and section_prompt:
+                        cleaned.append({"title": title[:80], "prompt": section_prompt})
+                if cleaned:
+                    return cleaned
+        except Exception:
+            continue
+    return fallback
+
+
 class TextAnswerSubmit(BaseModel):
     question_id: UUID
     session_id: UUID
     original_text: str
     native_language: Optional[str] = "English"
+
+
+def evaluate_section_practice(
+    target: dict[str, Any],
+    transcript: str,
+    metrics: dict[str, Any],
+    normalized: dict[str, Any],
+) -> dict[str, Any]:
+    fallback_score = 75
+    if metrics.get("pace_label") in {"too_fast", "too_slow"}:
+        fallback_score -= 12
+    if metrics.get("filler_count", 0) > 0:
+        fallback_score -= min(metrics.get("filler_count", 0) * 6, 18)
+    if any(tag in normalized.get("normalizedTags", []) for tag in ["flat", "hesitant", "unclear"]):
+        fallback_score -= 10
+    fallback_score = max(35, min(95, fallback_score))
+
+    if not gemini_client:
+        return {
+            "score": fallback_score,
+            "status": "improved" if fallback_score >= 75 else "keep_practicing",
+            "feedback": "Good retry. Keep the improved wording and focus on cleaner pace and emphasis.",
+            "next_cue": target.get("practice_cue") or "Repeat the line once more with a clear pause.",
+            "strength": "You practiced the targeted section.",
+        }
+
+    system_instruction = """
+You are SpeakReady's section practice evaluator. Compare the user's retry to the target improved section.
+Return JSON only:
+{
+  "score": 0-100,
+  "status": "improved" or "keep_practicing",
+  "strength": "One thing the user did better.",
+  "feedback": "Specific feedback on this retry.",
+  "next_cue": "One concrete instruction for the next retry."
+}
+Be concise, supportive, and based only on this one section.
+"""
+    prompt = {
+        "target_section": target,
+        "user_retry_transcript": transcript,
+        "speech_metrics": metrics,
+        "emotion_tone": normalized,
+    }
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.2,
+    )
+
+    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+        try:
+            response = gemini_client.models.generate_content(
+                model=model,
+                contents=json.dumps(prompt),
+                config=config,
+            )
+            data = safe_json(response.text)
+            score = int(data.get("score", fallback_score))
+            data["score"] = max(0, min(100, score))
+            data["status"] = (
+                "improved" if data["score"] >= 78 else data.get("status", "keep_practicing")
+            )
+            return data
+        except Exception:
+            continue
+
+    return {
+        "score": fallback_score,
+        "status": "improved" if fallback_score >= 75 else "keep_practicing",
+        "feedback": "Keep practicing this section with clearer pacing and emphasis.",
+        "next_cue": target.get("practice_cue") or "Repeat the line once more.",
+        "strength": "You completed a focused retry.",
+    }
 
 
 async def get_current_user_id(authorization: Optional[str] = Header(None)) -> str:
@@ -176,6 +330,9 @@ def analyze_script(
 You are SpeakReady's supportive Script Coach for multilingual, first-generation, immigrant, and under-coached students.
 Do not frame feedback as accent fixing or bad English. Focus on clearer delivery, listener-friendly phrasing, and rehearsal readiness.
 Use the user's transcript as the source of truth. Context is only background to understand what they mean; never replace the user's topic with generic interview content.
+Rewrite for spoken delivery, not just grammar. Improve sentence structure, fix clear spelling/word-choice mistakes from the transcript, remove filler words, split run-on thoughts, and make the phrasing easier for a listener to follow out loud.
+Preserve the user's meaning and personality. Do not invent new facts. If a phrase is unclear, make the smallest sensible correction based on the session context.
+In changes_made, prefer useful sentence-level improvements over tiny isolated word edits. Include no more than 6 high-impact changes.
 Return JSON only:
 {
   "improved_script": "Polished text structured for natural spoken delivery.",
@@ -247,8 +404,8 @@ VALID_CARTESIA_EMOTIONS = {
 
 
 def count_phrase(text: str, phrase: str) -> int:
-    padded = f" {text.lower()} "
-    return padded.count(f" {phrase.lower()} ")
+    escaped = re.escape(phrase.lower()).replace(r"\ ", r"\s+")
+    return len(re.findall(rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])", text.lower()))
 
 
 def split_sentences(text: str) -> list[str]:
@@ -1245,6 +1402,41 @@ async def create_question(data: QuestionCreate, user_id: str = Depends(get_curre
     return res.data[0]
 
 
+@app.post("/api/sessions/{session_id}/generate-sections", status_code=201)
+async def generate_session_sections(
+    session_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    session = owned_session(str(session_id), user_id)
+    sections = generate_presentation_sections(session)
+    payloads = [
+        {
+            "session_id": str(session_id),
+            "question_text": f"{section['title']}\n\n{section['prompt']}",
+            "source": "generated_section",
+        }
+        for section in sections
+    ]
+    res = supabase_admin.table("questions").insert(payloads).execute()
+    return res.data
+
+
+@app.delete("/api/questions/{question_id}", status_code=204)
+async def delete_question(question_id: UUID, user_id: str = Depends(get_current_user_id)):
+    res = (
+        supabase_admin.table("questions")
+        .select("id,session_id")
+        .eq("id", str(question_id))
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Question not found.")
+    owned_session(res.data[0]["session_id"], user_id)
+    supabase_admin.table("questions").delete().eq("id", str(question_id)).execute()
+    return None
+
+
 @app.get("/api/sessions/{session_id}/questions")
 async def get_session_questions(session_id: UUID, user_id: str = Depends(get_current_user_id)):
     owned_session(str(session_id), user_id)
@@ -1370,11 +1562,20 @@ async def analyze_audio_answer(
     question_id: str = Form(...),
     session_id: str = Form(...),
     duration_seconds: float = Form(0.0),
+    posture_analysis: Optional[str] = Form(None),
     file: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
 ):
     session = owned_session(session_id, user_id)
     question = question_text(question_id, session_id)
+    posture_payload = None
+    if posture_analysis:
+        try:
+            parsed = json.loads(posture_analysis)
+            if isinstance(parsed, dict):
+                posture_payload = parsed
+        except Exception:
+            posture_payload = None
     audio_content = await file.read()
     ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "webm"
     storage_path = f"records/{user_id}/{session_id}_{question_id}.{ext}"
@@ -1470,6 +1671,7 @@ async def analyze_audio_answer(
         "video_url": media_url,
         "script_analysis": script_analysis,
         "speech_analysis": speech_analysis,
+        "posture_analysis": posture_payload,
     }
     answer = supabase_admin.table("answers").insert(answer_payload).execute().data[0]
     practice_targets = enrich_practice_targets(
@@ -1510,4 +1712,86 @@ async def analyze_audio_answer(
         "coach_audio_url": coach_url,
         "coach_audio_error": coach_error,
         "recording_url": media_url,
+        "posture_analysis": posture_payload,
+    }
+
+
+@app.post("/api/answers/analyze-section-practice", status_code=201)
+async def analyze_section_practice(
+    target_json: str = Form(...),
+    duration_seconds: float = Form(0.0),
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    try:
+        target = json.loads(target_json)
+        if not isinstance(target, dict):
+            raise ValueError("target_json must be an object")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid practice target.") from exc
+
+    audio_content = await file.read()
+    transcript, stt_payload, stt_error = transcribe_with_elevenlabs(
+        audio_content,
+        file.filename,
+        file.content_type or "audio/webm",
+    )
+    if not transcript:
+        transcript, gemini_stt_error = transcribe_with_gemini(
+            audio_content,
+            file.content_type or "audio/webm",
+        )
+        if not transcript:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Section transcription failed. "
+                    f"ElevenLabs: {stt_error or 'no transcript'}. "
+                    f"Gemini: {gemini_stt_error or 'no transcript'}."
+                ),
+            )
+        stt_payload = {"source": "gemini_fallback", "error": stt_error}
+    else:
+        stt_payload["source"] = "elevenlabs_scribe"
+
+    metrics = speech_metrics(transcript, duration_seconds)
+    metrics["pace_timeline"] = pace_timeline_from_words(
+        stt_payload.get("words") or stt_payload.get("word_timestamps"),
+        duration_seconds,
+    )
+    raw_valence, valence_failed = call_valence(
+        audio_content,
+        file.content_type or "audio/webm",
+        duration_seconds,
+        file.filename,
+    )
+    normalized = normalize_valence(raw_valence, transcript, metrics)
+    evaluation = evaluate_section_practice(target, transcript, metrics, normalized)
+    coach_text = (
+        f"Section retry feedback. {evaluation.get('strength', '')} "
+        f"{evaluation.get('feedback', '')} Next: {evaluation.get('next_cue', '')}"
+    )
+    coach_url, coach_error = coach_voice_memo(
+        coach_text,
+        user_id,
+        f"section_retry_{int(time.time() * 1000)}",
+    )
+
+    return {
+        "transcript": transcript,
+        "score": evaluation.get("score"),
+        "status": evaluation.get("status"),
+        "strength": evaluation.get("strength"),
+        "feedback": evaluation.get("feedback"),
+        "next_cue": evaluation.get("next_cue"),
+        "speech_analysis": {
+            **metrics,
+            "valence": {
+                "raw": raw_valence,
+                "valenceFailed": valence_failed,
+                **normalized,
+            },
+        },
+        "coach_audio_url": coach_url,
+        "coach_audio_error": coach_error,
     }

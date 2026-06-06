@@ -45,6 +45,14 @@ export async function translateText(
   }
 
   try {
+    const payload: Record<string, string> = {
+      text,
+      target_lang: "en",
+    };
+    if (sourceLanguage !== "auto") {
+      payload.source_lang = sourceLanguage;
+    }
+
     const response = await fetch(
       "https://api.elevenlabs.io/v1/translation",
       {
@@ -53,11 +61,7 @@ export async function translateText(
           "xi-api-key": API_KEY,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          text,
-          source_lang: sourceLanguage,
-          target_lang: "en",
-        }),
+        body: JSON.stringify(payload),
       }
     );
 
