@@ -112,6 +112,7 @@ export function CreateSessionWizard() {
             )}
             {step === 1 && (
               <StepRole
+                interviewType={form.interview_type}
                 role={form.role}
                 organisation={form.organisation}
                 onRoleChange={(v) => setForm({ ...form, role: v })}
@@ -120,6 +121,7 @@ export function CreateSessionWizard() {
             )}
             {step === 2 && (
               <StepContext
+                interviewType={form.interview_type}
                 context={form.context}
                 onContextChange={(v) => setForm({ ...form, context: v })}
                 resumeUrl={form.resume_url}

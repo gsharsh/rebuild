@@ -5,9 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { uploadResume } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/client";
+import { getPurposeCopy } from "@/lib/purpose-copy";
 import { FileText, Upload, X } from "lucide-react";
 
 interface StepContextProps {
+  interviewType: string;
   context: string;
   onContextChange: (value: string) => void;
   resumeUrl: string | null;
@@ -15,11 +17,13 @@ interface StepContextProps {
 }
 
 export function StepContext({
+  interviewType,
   context,
   onContextChange,
   resumeUrl,
   onResumeUrlChange,
 }: StepContextProps) {
+  const copy = getPurposeCopy(interviewType);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -58,24 +62,25 @@ export function StepContext({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900">Add context</h2>
+      <h2 className="text-lg font-semibold text-gray-900">{copy.contextTitle}</h2>
       <p className="mt-1 text-sm text-muted">
-        Share background details or upload your resume to personalise coaching.
+        {copy.contextDescription}
       </p>
       <div className="mt-6 space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Background context
+            {copy.contextLabel}
           </label>
           <Textarea
             value={context}
             onChange={(e) => onContextChange(e.target.value)}
-            placeholder="Your major, key projects, why you're applying, relevant experience…"
+            placeholder={copy.contextPlaceholder}
             rows={6}
           />
         </div>
 
-        <div>
+        {copy.showResumeUpload && (
+          <div>
           <label className="mb-2 block text-sm font-medium text-gray-700">
             Resume (optional)
           </label>
@@ -113,7 +118,8 @@ export function StepContext({
           {uploadError && (
             <p className="mt-2 text-sm text-red-600">{uploadError}</p>
           )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
