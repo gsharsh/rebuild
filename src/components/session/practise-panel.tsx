@@ -6,21 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { OutputCard } from "@/components/ui/output-card";
 import { PostureAnalyzer, type PostureResult } from "@/components/session/posture-analyzer";
 import { analyzeAudio, analyzeText } from "@/lib/api-client";
-import { transcribeAudioFile, translateText } from "@/lib/elevenlabs-client";
+import { transcribeAudioFile } from "@/lib/elevenlabs-client";
 import { DEMO_ANSWER, DEMO_ANALYZE_RESPONSE } from "@/lib/demo-data";
 import type { AnalyzeResponse, AnswerMode } from "@/lib/api-types";
 import { Mic, Square, Upload, Video, FlaskConical } from "lucide-react";
-
-const NATIVE_LANGUAGES = [
-  { code: "hi", label: "Hindi" },
-  { code: "es", label: "Spanish" },
-  { code: "zh", label: "Mandarin" },
-  { code: "ar", label: "Arabic" },
-  { code: "fr", label: "French" },
-  { code: "te", label: "Telugu" },
-  { code: "ta", label: "Tamil" },
-  { code: "bn", label: "Bengali" },
-];
 
 interface PractisePanelProps {
   sessionId: string;
@@ -37,9 +26,8 @@ export function PractisePanel({
   onAnalyzeStart,
   onAnalyzeComplete,
 }: PractisePanelProps) {
-  const [mode, setMode] = useState<AnswerMode>("text");
+  const [mode, setMode] = useState<AnswerMode>("audio");
   const [text, setText] = useState("");
-  const [nativeLanguage, setNativeLanguage] = useState("hi");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState("");
@@ -51,9 +39,8 @@ export function PractisePanel({
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   const modes: { id: AnswerMode; label: string }[] = [
-    { id: "text", label: "Text" },
     { id: "audio", label: "Speak" },
-    { id: "native", label: "Native" },
+    { id: "text", label: "Text" },
     { id: "video", label: "Video" },
   ];
 
@@ -102,36 +89,6 @@ export function PractisePanel({
         }),
       DEMO_ANALYZE_RESPONSE
     );
-  }
-
-  async function submitNative() {
-    if (!text.trim()) return;
-    setLoading(true);
-    onAnalyzeStart();
-    setError("");
-    try {
-      const translation = await translateText(text.trim(), nativeLanguage);
-      if (translation.isMock && !translation.translatedText) {
-        throw new Error("Translation unavailable");
-      }
-      const englishText = translation.translatedText;
-      const result = await analyzeText({
-        question_id: questionId,
-        session_id: sessionId,
-        original_text: englishText,
-        native_language: nativeLanguage,
-      });
-      onAnalyzeComplete(result);
-      setText("");
-    } catch {
-      onAnalyzeComplete(DEMO_ANALYZE_RESPONSE, true);
-      setText("");
-      setError(
-        "Translation or analysis unavailable — showing demo. Check ELEVENLABS_API_KEY in .env."
-      );
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function startRecording() {
@@ -207,7 +164,7 @@ export function PractisePanel({
         </Button>
       }
     >
-      <p className="mb-4 text-sm leading-relaxed text-gray-800">{questionText}</p>
+      <p className="mb-5 text-xl font-medium leading-snug text-gray-900">{questionText}</p>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {modes.map((m) => (
@@ -232,35 +189,15 @@ export function PractisePanel({
         </p>
       )}
 
-      {(mode === "text" || mode === "native") && (
+      {mode === "text" && (
         <div className="space-y-3">
-          {mode === "native" && (
-            <div>
-              <label className="mb-1 block text-sm text-muted">Your language</label>
-              <select
-                value={nativeLanguage}
-                onChange={(e) => setNativeLanguage(e.target.value)}
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
-              >
-                {NATIVE_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <Textarea
-            placeholder={
-              mode === "native"
-                ? "Write your answer in your native language…"
-                : "Type your interview answer here…"
-            }
+            placeholder="Type your interview answer here…"
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={6}
           />
-          <Button onClick={mode === "native" ? submitNative : submitText} disabled={loading || !text.trim()}>
+          <Button onClick={submitText} disabled={loading || !text.trim()}>
             {loading ? "Analyzing…" : "Submit & get coaching"}
           </Button>
         </div>
@@ -269,7 +206,7 @@ export function PractisePanel({
       {mode === "audio" && (
         <div className="space-y-4 py-6 text-center">
           <p className="text-sm text-muted">
-            Record your spoken answer. We&apos;ll transcribe it and provide speech coaching.
+            Record your answer. Native language is fine.
           </p>
           {recording ? (
             <Button variant="danger" onClick={stopRecording}>

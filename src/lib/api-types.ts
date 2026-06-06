@@ -89,7 +89,7 @@ export interface QuestionWithAnswers extends Question {
   answers?: Answer[];
 }
 
-export type AnswerMode = "text" | "audio" | "native" | "video";
+export type AnswerMode = "text" | "audio" | "video";
 
 export const INTERVIEW_TYPES = [
   "Job Interview",

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { QuestionBar } from "@/components/session/question-bar";
 import { QuestionSidebar } from "@/components/session/question-sidebar";
 import { PractisePanel } from "@/components/session/practise-panel";
 import { ResultsPanel } from "@/components/session/results/results-panel";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   createQuestion,
+  deleteQuestion,
   getQuestionAnswers,
   getSession,
   getSessionQuestions,
@@ -116,6 +118,32 @@ export default function SessionWorkspacePage() {
     setAnalyzeResult(null);
   }
 
+  async function handleDeleteQuestion(questionId: string) {
+    const remaining = questions.filter((q) => q.id !== questionId);
+
+    if (!questionId.startsWith("demo-q-")) {
+      try {
+        await deleteQuestion(questionId);
+      } catch {
+        return;
+      }
+    }
+
+    setQuestions(remaining);
+    setScoredIds((prev) => {
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
+
+    if (activeQuestionId === questionId) {
+      const nextActive = remaining[remaining.length - 1]?.id ?? null;
+      setActiveQuestionId(nextActive);
+      setAnalyzeResult(null);
+      setIsDemo(false);
+    }
+  }
+
   async function handleGenerateMock() {
     setGenerating(true);
     try {
@@ -207,38 +235,43 @@ export default function SessionWorkspacePage() {
               activeQuestionId={activeQuestionId}
               onSelectQuestion={setActiveQuestionId}
               onAddQuestion={handleAddQuestion}
+              onDeleteQuestion={handleDeleteQuestion}
               onGenerateMock={handleGenerateMock}
               scoredQuestionIds={scoredIds}
               generating={generating}
             />
           </div>
 
-          <div className="lg:col-span-9">
-            {activeQuestion ? (
-              showResults ? (
-                <ResultsPanel
-                  result={analyzeResult}
-                  isDemo={isDemo}
-                  loading={analyzing}
-                />
-              ) : (
-                <PractisePanel
-                  sessionId={sessionId}
-                  questionId={activeQuestion.id}
-                  questionText={activeQuestion.question_text}
-                  onAnalyzeStart={() => setAnalyzing(true)}
-                  onAnalyzeComplete={handleAnalyzeComplete}
-                />
-              )
-            ) : (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-white py-16 text-center">
-                <p className="mb-4 text-sm text-muted">
-                  Generate or add a question to start practising.
-                </p>
-                <Button onClick={() => void handleGenerateMock()} disabled={generating}>
-                  Generate mock question
-                </Button>
+          <div className="lg:col-span-9 flex flex-col">
+            {!activeQuestion ? (
+              <div className="flex w-full justify-center pt-4">
+                <div className="w-full max-w-3xl">
+                  <QuestionBar
+                    onAdd={handleAddQuestion}
+                    onGenerate={handleGenerateMock}
+                    generating={generating}
+                    prominent
+                  />
+                </div>
               </div>
+            ) : (
+              <>
+                {showResults ? (
+                  <ResultsPanel
+                    result={analyzeResult}
+                    isDemo={isDemo}
+                    loading={analyzing}
+                  />
+                ) : (
+                  <PractisePanel
+                    sessionId={sessionId}
+                    questionId={activeQuestion.id}
+                    questionText={activeQuestion.question_text}
+                    onAnalyzeStart={() => setAnalyzing(true)}
+                    onAnalyzeComplete={handleAnalyzeComplete}
+                  />
+                )}
+              </>
             )}
 
             {showResults && activeQuestion && (

@@ -101,6 +101,12 @@ export async function createQuestion(
   });
 }
 
+export async function deleteQuestion(questionId: string): Promise<void> {
+  return apiFetch<void>(`/api/questions/${questionId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getQuestionAnswers(
   questionId: string
 ): Promise<Answer[]> {

@@ -109,43 +109,106 @@ def fallback_script(text: str) -> dict[str, Any]:
             }
         ],
         "coaching_lesson": "Open with a direct answer, use shorter sentences, and connect your example back to the opportunity.",
+        "words_to_practice": [],
     }
 
 
-def analyze_script(role: str, org: str, question: str, text: str) -> dict[str, Any]:
+def analyze_script(
+    role: str,
+    organization: str,
+    context_notes: str,
+    question: str,
+    user_response: str,
+    interview_type: str = "",
+) -> dict[str, Any]:
     if not gemini_client:
-        return fallback_script(text)
+        return fallback_script(user_response)
+
+    user_prompt = f"""
+CONTEXT PROFILE:
+- Interview Type: {interview_type or "Interview"}
+- Target Role: {role}
+- Target Organization: {organization}
+- Additional Background Context: {context_notes or "No additional context provided."}
+
+INTERVIEW DATA:
+- Question Asked: {question}
+- Student's Raw Input/Draft: {user_response}
+
+Analyze this response. Refine its structural clarity, optimize it for a spoken interview rehearsal, and output data matching the requested layout constraints.
+"""
 
     system_instruction = """
-You are SpeakReady's supportive Script Coach for multilingual, first-generation, immigrant, and under-coached students.
-Do not frame feedback as accent fixing or bad English. Focus on clearer delivery, listener-friendly phrasing, and interview readiness.
-Return JSON only:
+You are the elite AI Script Coach for 'SpeakReady', an interview rehearsal platform built for multilingual, first-generation, and immigrant students.
+
+CRITICAL PROCESSING RULES:
+1. PRESERVE THE INITIAL CAPABILITY: Do not convert the speech into an impersonal corporate template. Retain personal anecdotes, technical specificity, and original character traits.
+2. OPTIMIZE FOR ORAL COMPREHENSION: Convert winding, long compound sentences into brief, impactful expressions. Multi-clause groupings create breath gaps and increase stutter risks for non-native speakers under stress.
+3. INSTRUCTIONAL ANALYSIS: Return a clear, encouraging analysis detailing WHY updates were made so the user builds structural intuition over time.
+4. TARGET PRACTICE ARRAYS: Isolate 2-3 specific technical or multi-syllabic terms from the updated response that require deliberate articulation pacing.
+
+Never frame feedback as accent fixing, bad English, or poor English. Use supportive language about clearer delivery, confidence coaching, and interview readiness.
+
+You MUST respond strictly in the following JSON schema representation without markdown tags or wrapped text:
 {
-  "improved_script": "Polished text structured for natural spoken delivery.",
-  "changes_made": [{"original": "str", "fixed": "str", "reason": "str"}],
-  "coaching_lesson": "Short explanation helping the student learn the improvement."
+  "improved_script": "The complete polished text optimized for spoken delivery.",
+  "changes_made": [
+    {
+      "original": "The string section extracted from the input text prior to parsing.",
+      "fixed": "The targeted correction replacement.",
+      "reason": "Clear explanation linking the change to breathing cadence or delivery impact."
+    }
+  ],
+  "coaching_lesson": "A supportive 2-sentence summary detailing structural patterns used to enhance this specific text block.",
+  "words_to_practice": ["word1", "word2"]
 }
 """
-    prompt = f"Role: {role} | Organisation: {org}\nQuestion: {question}\nAnswer: {text}"
+
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
         response_mime_type="application/json",
         temperature=0.3,
     )
 
-    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
-        for attempt in range(3):
-            try:
-                response = gemini_client.models.generate_content(
-                    model=model, contents=prompt, config=config
-                )
+    retry_delay = 2
+    for attempt in range(3):
+        try:
+            response = gemini_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=user_prompt,
+                config=config,
+            )
+            if response and response.text:
                 return safe_json(response.text)
-            except ServerError:
-                time.sleep(2**attempt)
-            except Exception:
-                break
+        except ServerError:
+            if attempt < 2:
+                time.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                try:
+                    response = gemini_client.models.generate_content(
+                        model="gemini-2.5-flash-lite",
+                        contents=user_prompt,
+                        config=config,
+                    )
+                    if response and response.text:
+                        return safe_json(response.text)
+                except Exception:
+                    pass
+        except Exception:
+            break
 
-    return fallback_script(text)
+    return fallback_script(user_response)
+
+
+def script_context_from_session(session: dict[str, Any]) -> dict[str, str]:
+    """Map Supabase session row to Gemini context profile fields."""
+    return {
+        "role": session.get("role", ""),
+        "organization": session.get("organisation", ""),
+        "context_notes": session.get("context") or "",
+        "interview_type": session.get("interview_type", ""),
+    }
 
 
 FILLER_MARKERS = [
@@ -371,6 +434,21 @@ async def get_session_questions(session_id: UUID, user_id: str = Depends(get_cur
     return res.data
 
 
+@app.delete("/api/questions/{question_id}", status_code=204)
+async def delete_question(question_id: UUID, user_id: str = Depends(get_current_user_id)):
+    res = (
+        supabase_admin.table("questions")
+        .select("*")
+        .eq("id", str(question_id))
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Question not found.")
+    owned_session(res.data[0]["session_id"], user_id)
+    supabase_admin.table("answers").delete().eq("question_id", str(question_id)).execute()
+    supabase_admin.table("questions").delete().eq("id", str(question_id)).execute()
+
+
 @app.get("/api/questions/{question_id}/answers")
 async def get_question_answers(question_id: UUID, user_id: str = Depends(get_current_user_id)):
     res = (
@@ -388,11 +466,14 @@ async def get_question_answers(question_id: UUID, user_id: str = Depends(get_cur
 async def analyze_text_answer(data: TextAnswerSubmit, user_id: str = Depends(get_current_user_id)):
     session = owned_session(str(data.session_id), user_id)
     question = question_text(str(data.question_id), str(data.session_id))
+    ctx = script_context_from_session(session)
     script_analysis = analyze_script(
-        role=session["role"],
-        org=session["organisation"],
+        role=ctx["role"],
+        organization=ctx["organization"],
+        context_notes=ctx["context_notes"],
         question=question,
-        text=data.original_text,
+        user_response=data.original_text,
+        interview_type=ctx["interview_type"],
     )
     speech_analysis = speech_metrics(data.original_text)
     answer_payload = {
@@ -463,8 +544,14 @@ async def analyze_audio_answer(
         except Exception:
             pass
 
+    ctx = script_context_from_session(session)
     script_analysis = analyze_script(
-        role=session["role"], org=session["organisation"], question=question, text=transcript
+        role=ctx["role"],
+        organization=ctx["organization"],
+        context_notes=ctx["context_notes"],
+        question=question,
+        user_response=transcript,
+        interview_type=ctx["interview_type"],
     )
     speech_analysis = speech_metrics(transcript, duration_seconds)
     answer_payload = {
