@@ -123,6 +123,19 @@ export interface SectionPracticeResult {
   strength?: string;
   feedback: string;
   next_cue: string;
+  comparison?: {
+    target_script?: string;
+    target_word_count?: number;
+    retry_word_count?: number;
+    similarity?: number;
+    coverage?: number;
+    length_ratio?: number;
+    wpm?: number;
+    pace_label?: string;
+    filler_count?: number;
+    tone_tags?: string[];
+    issues?: string[];
+  };
   speech_analysis: SpeechAnalysis;
   coach_audio_url: string | null;
   coach_audio_error?: string | null;

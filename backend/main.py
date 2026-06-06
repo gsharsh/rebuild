@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from tempfile import NamedTemporaryFile
 from typing import Any, Optional
 from uuid import UUID
@@ -203,29 +204,142 @@ class TextAnswerSubmit(BaseModel):
     native_language: Optional[str] = "English"
 
 
+def spoken_tokens(text: str) -> list[str]:
+    return [
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?", text)
+        if token.strip()
+    ]
+
+
+def section_retry_baseline(
+    target: dict[str, Any],
+    transcript: str,
+    metrics: dict[str, Any],
+    normalized: dict[str, Any],
+) -> dict[str, Any]:
+    target_script = str(
+        target.get("demo")
+        or target.get("improved")
+        or target.get("original")
+        or target.get("practice_cue")
+        or ""
+    ).strip()
+    retry_tokens = spoken_tokens(transcript)
+    target_tokens = spoken_tokens(target_script)
+    retry_word_count = len(retry_tokens)
+    target_word_count = max(len(target_tokens), 1)
+    wpm = int(metrics.get("pacing_words_per_minute") or 0)
+    filler_count = int(metrics.get("filler_count") or 0)
+    retry_norm = " ".join(retry_tokens)
+    target_norm = " ".join(target_tokens)
+    similarity = SequenceMatcher(None, target_norm, retry_norm).ratio() if target_norm else 0
+    coverage = (
+        len(set(retry_tokens) & set(target_tokens)) / max(len(set(target_tokens)), 1)
+        if target_tokens
+        else 0
+    )
+    length_ratio = retry_word_count / target_word_count if target_word_count else 0
+    tags = normalized.get("normalizedTags", []) if isinstance(normalized, dict) else []
+
+    issues: list[str] = []
+    strengths: list[str] = []
+    next_cues: list[str] = []
+    score = 92
+    score_ceiling = 100
+
+    if retry_word_count == 0:
+        issues.append("No clear speech was detected in this retry.")
+        next_cues.append("Record the full improved line once, clearly and close to the microphone.")
+        score = 35
+        score_ceiling = 45
+    else:
+        if wpm >= 190:
+            issues.append(f"You rushed this retry at about {wpm} WPM, so the line may blur for listeners.")
+            next_cues.append("Repeat it at a calmer pace with a short pause after the main phrase.")
+            score -= 24
+            score_ceiling = min(score_ceiling, 72)
+        elif wpm >= 165:
+            issues.append(f"Your retry was a bit quick at about {wpm} WPM.")
+            next_cues.append("Slow the first half down slightly and land the final word.")
+            score -= 12
+            score_ceiling = min(score_ceiling, 84)
+        elif 110 <= wpm <= 155:
+            strengths.append(f"Your pace was listener-friendly at about {wpm} WPM.")
+        elif wpm and wpm < 95:
+            issues.append(f"Your retry was quite slow at about {wpm} WPM, which can lose energy.")
+            next_cues.append("Connect the words more smoothly while keeping the ending clear.")
+            score -= 16
+            score_ceiling = min(score_ceiling, 78)
+        elif wpm:
+            strengths.append(f"Your pace was controlled at about {wpm} WPM.")
+
+        if filler_count:
+            filler_word = "filler" if filler_count == 1 else "fillers"
+            issues.append(f"I heard {filler_count} {filler_word} in the retry.")
+            next_cues.append("Replace fillers with a silent pause and restart the phrase cleanly.")
+            score -= min(8 * filler_count, 24)
+            score_ceiling = min(score_ceiling, 76)
+
+        if target_script and (similarity < 0.58 or coverage < 0.6 or length_ratio < 0.72):
+            issues.append("You skipped or changed too much of the improved speaking version.")
+            next_cues.append("Read the improved line exactly once before adding your own wording.")
+            score -= 22
+            score_ceiling = min(score_ceiling, 70)
+        elif target_script and (similarity >= 0.78 or coverage >= 0.82):
+            strengths.append("You stayed close to the improved speaking version.")
+
+        if any(tag in tags for tag in ["flat", "monotone", "low_confidence"]):
+            issues.append("The tone still sounded a little flat, so the line needs more vocal lift.")
+            next_cues.append("Emphasize the most important word and lift your voice slightly at the end.")
+            score -= 10
+            score_ceiling = min(score_ceiling, 82)
+        elif any(tag in tags for tag in ["energetic", "confident", "friendly", "warm"]):
+            strengths.append("Your tone had more presence in this retry.")
+
+    score = max(35, min(95, score, score_ceiling))
+    status = "improved" if score >= 78 and not issues else "keep_practicing"
+    if not strengths:
+        strengths.append("You completed the retry and gave the coach new speech to evaluate.")
+    if not issues:
+        issues.append("This retry is closer to the target delivery.")
+    if not next_cues:
+        next_cues.append(target.get("practice_cue") or "Repeat it once more with the same clear pace and emphasis.")
+
+    comparison = {
+        "target_script": target_script,
+        "target_word_count": target_word_count,
+        "retry_word_count": retry_word_count,
+        "similarity": round(similarity, 2),
+        "coverage": round(coverage, 2),
+        "length_ratio": round(length_ratio, 2),
+        "wpm": wpm,
+        "pace_label": metrics.get("pace_label"),
+        "filler_count": filler_count,
+        "tone_tags": tags[:6] if isinstance(tags, list) else [],
+        "issues": issues,
+    }
+    return {
+        "score": score,
+        "score_ceiling": score_ceiling,
+        "status": status,
+        "strength": strengths[0],
+        "feedback": " ".join(issues[:2]),
+        "next_cue": next_cues[0],
+        "comparison": comparison,
+    }
+
+
 def evaluate_section_practice(
     target: dict[str, Any],
     transcript: str,
     metrics: dict[str, Any],
     normalized: dict[str, Any],
 ) -> dict[str, Any]:
-    fallback_score = 75
-    if metrics.get("pace_label") in {"too_fast", "too_slow"}:
-        fallback_score -= 12
-    if metrics.get("filler_count", 0) > 0:
-        fallback_score -= min(metrics.get("filler_count", 0) * 6, 18)
-    if any(tag in normalized.get("normalizedTags", []) for tag in ["flat", "hesitant", "unclear"]):
-        fallback_score -= 10
-    fallback_score = max(35, min(95, fallback_score))
+    baseline = section_retry_baseline(target, transcript, metrics, normalized)
 
     if not gemini_client:
-        return {
-            "score": fallback_score,
-            "status": "improved" if fallback_score >= 75 else "keep_practicing",
-            "feedback": "Good retry. Keep the improved wording and focus on cleaner pace and emphasis.",
-            "next_cue": target.get("practice_cue") or "Repeat the line once more with a clear pause.",
-            "strength": "You practiced the targeted section.",
-        }
+        return baseline
 
     system_instruction = """
 You are SpeakReady's section practice evaluator. Compare the user's retry to the target improved section.
@@ -238,12 +352,21 @@ Return JSON only:
   "next_cue": "One concrete instruction for the next retry."
 }
 Be concise, supportive, and based only on this one section.
+Use the retry_comparison fields as hard evidence. If the retry is too fast, too slow, missing target words, or has fillers, say so directly.
 """
     prompt = {
         "target_section": target,
         "user_retry_transcript": transcript,
         "speech_metrics": metrics,
         "emotion_tone": normalized,
+        "retry_comparison": baseline.get("comparison"),
+        "baseline_evaluation": {
+            "score": baseline.get("score"),
+            "status": baseline.get("status"),
+            "strength": baseline.get("strength"),
+            "feedback": baseline.get("feedback"),
+            "next_cue": baseline.get("next_cue"),
+        },
     }
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
@@ -259,22 +382,23 @@ Be concise, supportive, and based only on this one section.
                 config=config,
             )
             data = safe_json(response.text)
-            score = int(data.get("score", fallback_score))
+            score = int(data.get("score", baseline["score"]))
+            score = min(score, baseline.get("score_ceiling", 100))
             data["score"] = max(0, min(100, score))
-            data["status"] = (
-                "improved" if data["score"] >= 78 else data.get("status", "keep_practicing")
-            )
+            if baseline["status"] == "keep_practicing" and data["score"] < 85:
+                data["status"] = "keep_practicing"
+                data["feedback"] = baseline["feedback"]
+                data["next_cue"] = baseline["next_cue"]
+            else:
+                data["status"] = (
+                    "improved" if data["score"] >= 78 else data.get("status", "keep_practicing")
+                )
+            data["comparison"] = baseline.get("comparison")
             return data
         except Exception:
             continue
 
-    return {
-        "score": fallback_score,
-        "status": "improved" if fallback_score >= 75 else "keep_practicing",
-        "feedback": "Keep practicing this section with clearer pacing and emphasis.",
-        "next_cue": target.get("practice_cue") or "Repeat the line once more.",
-        "strength": "You completed a focused retry.",
-    }
+    return baseline
 
 
 async def get_current_user_id(authorization: Optional[str] = Header(None)) -> str:
@@ -1790,6 +1914,7 @@ async def analyze_section_practice(
         "strength": evaluation.get("strength"),
         "feedback": evaluation.get("feedback"),
         "next_cue": evaluation.get("next_cue"),
+        "comparison": evaluation.get("comparison"),
         "speech_analysis": {
             **metrics,
             "valence": {

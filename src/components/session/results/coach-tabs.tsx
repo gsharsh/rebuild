@@ -245,6 +245,38 @@ function PracticeTargetCard({
                   Your retry
                 </p>
                 <p className="text-gray-700">{practiceResult.transcript}</p>
+                {practiceResult.comparison && (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <p className="text-[11px] uppercase tracking-wide text-muted">
+                        Retry pace
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {practiceResult.comparison.wpm
+                          ? `${practiceResult.comparison.wpm} WPM`
+                          : "Not enough audio"}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <p className="text-[11px] uppercase tracking-wide text-muted">
+                        Fillers
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {practiceResult.comparison.filler_count ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <p className="text-[11px] uppercase tracking-wide text-muted">
+                        Script match
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {practiceResult.comparison.coverage != null
+                          ? `${Math.round(practiceResult.comparison.coverage * 100)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {practiceResult.strength && (
                   <p className="text-sm text-emerald-700">
                     {practiceResult.strength}
