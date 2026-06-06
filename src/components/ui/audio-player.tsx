@@ -8,9 +8,15 @@ interface AudioPlayerProps {
   src: string | null;
   label?: string;
   className?: string;
+  unavailableMessage?: string;
 }
 
-export function AudioPlayer({ src, label = "Coach advice", className }: AudioPlayerProps) {
+export function AudioPlayer({
+  src,
+  label = "Coach advice",
+  className,
+  unavailableMessage = "Audio coaching unavailable for this answer.",
+}: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -23,7 +29,7 @@ export function AudioPlayer({ src, label = "Coach advice", className }: AudioPla
         )}
       >
         <Volume2 className="h-4 w-4 shrink-0" />
-        <span>Audio coaching unavailable for this answer.</span>
+        <span>{unavailableMessage}</span>
       </div>
     );
   }
@@ -58,7 +64,7 @@ export function AudioPlayer({ src, label = "Coach advice", className }: AudioPla
       </button>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-brand-800">{label}</p>
-        <p className="text-xs text-muted">Listen to personalised coaching tips</p>
+        <p className="text-xs text-muted">Pronunciation and delivery coaching</p>
       </div>
       <audio
         ref={audioRef}

@@ -1,16 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import type { Session } from "@/lib/api-types";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Copy, Menu, Pencil, Trash2, X } from "lucide-react";
 
 interface SessionCardProps {
   session: Session;
   questionCount?: number;
+  onRename?: (
+    id: string,
+    payload: { role: string; organisation: string }
+  ) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   deleting?: boolean;
 }
@@ -18,41 +23,178 @@ interface SessionCardProps {
 export function SessionCard({
   session,
   questionCount = 0,
+  onRename,
   onDelete,
   deleting = false,
 }: SessionCardProps) {
+  const [editing, setEditing] = useState(false);
+  const [role, setRole] = useState(session.role);
+  const [organisation, setOrganisation] = useState(session.organisation);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  async function saveEdit() {
+    if (!role.trim() || !organisation.trim() || !onRename) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await onRename(session.id, {
+        role: role.trim(),
+        organisation: organisation.trim(),
+      });
+      setEditing(false);
+      setMenuOpen(false);
+      setMessage("Renamed");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rename failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCurrent() {
+    if (!onDelete) return;
+    const ok = window.confirm(
+      `Delete "${session.role}"? This removes its questions and answers.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await onDelete(session.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Delete failed");
+      setBusy(false);
+    }
+  }
+
+  async function shareSession() {
+    const url = `${window.location.origin}/sessions/${session.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setMenuOpen(false);
+      setMessage("Link copied");
+    } catch {
+      setMessage(url);
+    }
+  }
+
   return (
     <Card className="group relative flex h-full flex-col transition-all hover:border-secondary hover:shadow-md">
-      {onDelete && (
-        <button
-          type="button"
-          title="Delete session"
-          disabled={deleting}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            void onDelete(session.id);
-          }}
-          className="absolute right-3 top-3 z-10 rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
       <CardContent className="flex flex-1 flex-col py-5">
-        <div className="flex items-start justify-between gap-2 pr-8">
+        <div className="flex items-start justify-between gap-2 pr-2">
           <Badge variant="info">{session.interview_type}</Badge>
-          <span className="text-xs text-on-surface-variant">
-            {formatDate(session.updated_at)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-on-surface-variant">
+              {formatDate(session.updated_at)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+              aria-label="Session actions"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <h3 className="mt-3 line-clamp-1 font-semibold text-on-surface">{session.role}</h3>
-        <p className="line-clamp-1 text-sm text-on-surface-variant">
-          {session.organisation}
-        </p>
+
+        {menuOpen && (
+          <div className="absolute right-5 top-12 z-10 w-40 rounded-lg border border-outline-variant bg-white p-1 shadow-lg">
+            {onRename && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(true);
+                  setMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-low"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Rename
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void shareSession()}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-on-surface hover:bg-surface-container-low"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Share link
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void deleteCurrent();
+                }}
+                disabled={busy || deleting}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            )}
+          </div>
+        )}
+
+        {editing ? (
+          <div className="mt-3 space-y-2">
+            <input
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+              className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm font-medium text-on-surface"
+              aria-label="Session name"
+            />
+            <input
+              value={organisation}
+              onChange={(event) => setOrganisation(event.target.value)}
+              className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface"
+              aria-label="Organisation"
+            />
+          </div>
+        ) : (
+          <>
+            <h3 className="mt-3 line-clamp-1 font-semibold text-on-surface">
+              {session.role}
+            </h3>
+            <p className="line-clamp-1 text-sm text-on-surface-variant">
+              {session.organisation}
+            </p>
+          </>
+        )}
+
         <p className="mt-3 text-xs text-on-surface-variant">
           {questionCount} question{questionCount !== 1 ? "s" : ""}
         </p>
-        <div className="mt-4 pt-2">
+        {message && (
+          <p className="mt-2 truncate text-xs text-secondary">{message}</p>
+        )}
+
+        <div className="mt-auto pt-4">
+          {editing && (
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <Button size="sm" onClick={() => void saveEdit()} disabled={busy}>
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setRole(session.role);
+                  setOrganisation(session.organisation);
+                  setEditing(false);
+                }}
+                disabled={busy}
+              >
+                <X className="mr-1.5 h-3.5 w-3.5" />
+                Cancel
+              </Button>
+            </div>
+          )}
           <Link href={`/sessions/${session.id}`}>
             <Button variant="secondary" size="sm" className="w-full">
               Continue

@@ -13,6 +13,26 @@ export const DEMO_ANALYZE_RESPONSE: AnalyzeResponse = {
     pacing_words_per_minute: 142,
     energy_delivery_score: "Steady, conversational",
     hesitation_markers_detected: ["like", "I think", "kind of"],
+    pace_label: "good",
+    filler_count: 3,
+    filler_per_minute: 2.1,
+    valence: {
+      normalizedTags: ["hesitant", "clear"],
+      primaryFocus: "clarity",
+      scores: { clarity: 0.72, confidence: 0.58 },
+    },
+    emotional_coach_text:
+      "Your idea is clear and easy to follow. The filler words make the delivery feel less certain. Try replacing them with one clean pause before your key point.",
+    emotional_next_action: "Repeat the opening with one pause before the main idea.",
+    practice_targets: [
+      {
+        type: "sentence",
+        focus: "Contains hesitation phrases and filler words.",
+        original: DEMO_ANSWER,
+        demo: "One project I built was an app for helping people practise interviews.",
+        practice_cue: "Repeat this line until it sounds smooth without filler words.",
+      },
+    ],
   },
   script_analysis: {
     improved_script:

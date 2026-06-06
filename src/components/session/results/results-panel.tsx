@@ -44,7 +44,15 @@ export function ResultsPanel({ result, isDemo, loading }: ResultsPanelProps) {
       <ScoreRow result={result} />
       <ScriptDisplay transcript={result.transcript} changes={changes} />
       <ScriptSplitView analysis={result.script_analysis} />
-      <AudioPlayer src={result.coach_audio_url} label="Play audio advice" />
+      <AudioPlayer
+        src={result.coach_audio_url}
+        label="Listen to coach readback"
+        unavailableMessage={
+          result.coach_audio_error ??
+          result.speech_analysis?.coach_audio_error ??
+          "Coach audio unavailable — check ELEVENLABS_API_KEY on the backend."
+        }
+      />
       <CoachTabs result={result} isDemo={isDemo} />
     </div>
   );

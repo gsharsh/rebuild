@@ -7,7 +7,7 @@ import { SessionCard } from "@/components/dashboard/session-card";
 import { SessionToolbar } from "@/components/dashboard/session-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { deleteSession, getSessions } from "@/lib/api-client";
+import { deleteSession, getSessions, updateSession } from "@/lib/api-client";
 import { createClient } from "@/lib/supabase/client";
 import type { Session } from "@/lib/api-types";
 import { Plus, Briefcase } from "lucide-react";
@@ -48,8 +48,17 @@ export default function DashboardPage() {
     void load();
   }, []);
 
+  async function handleRenameSession(
+    id: string,
+    payload: { role: string; organisation: string }
+  ) {
+    const updated = await updateSession(id, payload);
+    setSessions((current) =>
+      current.map((session) => (session.id === id ? updated : session))
+    );
+  }
+
   async function handleDeleteSession(sessionId: string) {
-    if (!confirm("Delete this session? This cannot be undone.")) return;
     setDeletingId(sessionId);
     setDeleteError("");
     try {
@@ -139,6 +148,7 @@ export default function DashboardPage() {
               <SessionCard
                 key={s.id}
                 session={s}
+                onRename={handleRenameSession}
                 onDelete={handleDeleteSession}
                 deleting={deletingId === s.id}
               />
