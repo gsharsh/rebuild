@@ -20,11 +20,11 @@ function toneSummary(result: AnalyzeResponse): { value: string; sublabel: string
 
   if (focus) {
     return {
-      value: focus
+      value: tags.length > 0 ? tags.slice(0, 3).join(", ") : focus,
+      sublabel: focus
         .split(" ")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" "),
-      sublabel: tags.length > 0 ? tags.slice(0, 3).join(", ") : "Valence tone signal",
     };
   }
 
