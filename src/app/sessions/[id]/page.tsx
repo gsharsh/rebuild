@@ -216,16 +216,18 @@ export default function SessionWorkspacePage() {
         <div className="mb-4">
           <Link
             href="/dashboard"
-            className="inline-flex items-center text-sm text-muted hover:text-gray-900"
+            className="inline-flex items-center text-sm text-on-surface-variant hover:text-on-surface"
           >
             <ArrowLeft className="mr-1 h-4 w-4" />
             Your Sessions
           </Link>
           <div className="mt-2 flex items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-900">{session.role}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
+              {session.role}
+            </h1>
             <Badge variant="info">{session.interview_type}</Badge>
           </div>
-          <p className="text-sm text-muted">{session.organisation}</p>
+          <p className="text-sm text-on-surface-variant">{session.organisation}</p>
         </div>
 
         <div className="grid min-h-[calc(100vh-180px)] grid-cols-1 gap-4 lg:grid-cols-12">

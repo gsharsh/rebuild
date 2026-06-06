@@ -31,10 +31,13 @@ export function QuestionBar({
     }
   }
 
+  const inputClass =
+    "min-w-0 flex-1 rounded-lg border border-outline-variant bg-white px-4 text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2";
+
   if (prominent) {
     return (
-      <div className="w-full rounded-2xl border border-border bg-white px-8 py-7 shadow-sm">
-        <p className="mb-5 text-center text-sm text-muted">
+      <div className="w-full rounded-lg border border-outline-variant bg-surface-elevated px-8 py-7 shadow-sm">
+        <p className="mb-5 text-center text-sm text-on-surface-variant">
           Or add one here to start practising.
         </p>
         <div className="flex gap-3">
@@ -43,7 +46,7 @@ export function QuestionBar({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Your question"
-            className="min-w-0 flex-1 rounded-xl border border-border px-5 py-4 text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/25 min-h-[52px]"
+            className={`${inputClass} rounded-xl py-4 text-base min-h-[52px]`}
             onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
           />
           <Button
@@ -59,7 +62,7 @@ export function QuestionBar({
             type="button"
             onClick={() => void onGenerate()}
             disabled={generating}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-gray-50 hover:text-gray-700"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
           >
             <Sparkles className="h-3.5 w-3.5" />
             {generating ? "Generating…" : "Generate mock"}
@@ -70,14 +73,14 @@ export function QuestionBar({
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-border bg-white px-4 py-3">
+    <div className="mb-4 rounded-lg border border-outline-variant bg-surface-elevated px-4 py-3">
       <div className="flex gap-2">
         <input
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Your question"
-          className="min-w-0 flex-1 rounded-lg border border-border px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+          className={`${inputClass} py-2.5 text-sm`}
           onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
         />
         <Button
@@ -92,7 +95,7 @@ export function QuestionBar({
         type="button"
         onClick={() => void onGenerate()}
         disabled={generating}
-        className="mt-2 inline-flex items-center gap-1 text-xs text-muted hover:text-gray-700"
+        className="mt-2 inline-flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface"
       >
         <Sparkles className="h-3 w-3" />
         {generating ? "Generating…" : "Generate mock"}

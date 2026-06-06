@@ -1,32 +1,44 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
-  --color-surface: #f8fafc;
+  /* Reference palette */
+  --color-surface: #f8f9ff;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #45464d;
+  --color-secondary: #2170e4;
+  --color-secondary-dark: #0058be;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container-high: #dce9ff;
+  --color-outline-variant: #c6c6cd;
+  --color-primary-action: #000000;
+  --color-success: #10b981;
+
+  /* Legacy aliases — map to reference tokens */
+  --color-brand-50: #eff4ff;
+  --color-brand-100: #dce9ff;
+  --color-brand-200: #adc6ff;
+  --color-brand-300: #7ba3f5;
+  --color-brand-400: #4d85ee;
+  --color-brand-500: #2170e4;
+  --color-brand-600: #2170e4;
+  --color-brand-700: #0058be;
+  --color-brand-800: #004395;
+  --color-brand-900: #001a42;
   --color-surface-elevated: #ffffff;
   --color-border: #e2e8f0;
-  --color-muted: #64748b;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-muted: #45464d;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
   font-family: var(--font-sans);
   background: var(--color-surface);
-  color: #0f172a;
+  color: var(--color-on-surface);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: var(--color-brand-200);
-  color: var(--color-brand-900);
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
 }

@@ -21,20 +21,22 @@ export function DashboardHeader({ userName }: DashboardHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-outline-variant bg-surface shadow-sm">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 font-semibold text-brand-700"
+          className="flex items-center gap-2 text-lg font-bold text-on-surface"
         >
           <Mic className="h-5 w-5" />
           SpeakReady
         </Link>
         <div className="flex items-center gap-3">
           {userName && (
-            <span className="hidden text-sm text-muted sm:inline">{userName}</span>
+            <span className="hidden text-sm text-on-surface-variant sm:inline">
+              {userName}
+            </span>
           )}
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
+          <Button variant="secondary" size="sm" onClick={handleSignOut}>
             Sign out
           </Button>
         </div>

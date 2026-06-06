@@ -4,10 +4,10 @@ import { Mic, BookOpen, Globe, Video } from "lucide-react";
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <div className="flex items-center gap-2 font-semibold text-brand-700">
+    <div className="min-h-screen bg-surface">
+      <header className="sticky top-0 z-40 border-b border-outline-variant bg-surface shadow-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-2 text-lg font-bold text-on-surface">
             <Mic className="h-5 w-5" />
             SpeakReady
           </div>
@@ -25,15 +25,14 @@ export default function HomePage() {
       </header>
 
       <main>
-        <section className="mx-auto max-w-6xl px-4 py-20 text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 tracking-tight">
+        <section className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+          <h1 className="text-4xl font-semibold tracking-tight text-on-surface sm:text-5xl">
             Your private rehearsal room for
-            <span className="text-brand-600"> high-stakes speaking</span>
+            <span className="text-secondary"> high-stakes speaking</span>
           </h1>
-          <p className="mt-6 text-lg text-muted max-w-2xl mx-auto">
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-on-surface-variant">
             Practise job interviews, visa interviews, presentations, and pitches.
-            Get supportive coaching on script, speech, bilingual prep, and presence —
-            built for smart students who deserve great coaching.
+            Get supportive coaching on script, speech, and presence.
           </p>
           <div className="mt-8 flex justify-center gap-3">
             <Link href="/login">
@@ -42,8 +41,8 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 pb-20">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 icon: BookOpen,
@@ -68,11 +67,11 @@ export default function HomePage() {
             ].map((f) => (
               <div
                 key={f.title}
-                className="rounded-xl border border-border bg-white p-6"
+                className="rounded-lg border border-outline-variant bg-surface-elevated p-6 shadow-sm"
               >
-                <f.icon className="h-8 w-8 text-brand-600 mb-3" />
-                <h3 className="font-semibold text-gray-900">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted">{f.desc}</p>
+                <f.icon className="mb-3 h-8 w-8 text-secondary" />
+                <h3 className="font-semibold text-on-surface">{f.title}</h3>
+                <p className="mt-2 text-sm text-on-surface-variant">{f.desc}</p>
               </div>
             ))}
           </div>

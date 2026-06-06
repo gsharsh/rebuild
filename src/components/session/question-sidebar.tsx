@@ -51,7 +51,7 @@ export function QuestionSidebar({
       <CardContent className="flex flex-1 flex-col gap-2 overflow-hidden">
         <div className="flex-1 space-y-1 overflow-y-auto">
           {questions.length === 0 && (
-            <p className="py-1 text-sm text-muted">
+            <p className="py-1 text-sm text-on-surface-variant">
               Add a question you&apos;re prepping for.
             </p>
           )}
@@ -61,8 +61,8 @@ export function QuestionSidebar({
               className={cn(
                 "group flex items-start gap-1 rounded-lg border transition-colors",
                 activeQuestionId === q.id
-                  ? "border-brand-200 bg-brand-50"
-                  : "border-transparent hover:bg-gray-50"
+                  ? "border-secondary bg-surface-container-low"
+                  : "border-transparent hover:bg-surface-container-low"
               )}
             >
               <button
@@ -70,13 +70,13 @@ export function QuestionSidebar({
                 onClick={() => onSelectQuestion(q.id)}
                 className={cn(
                   "min-w-0 flex-1 px-3 py-2 text-left text-sm",
-                  activeQuestionId === q.id ? "text-brand-800" : "text-gray-900"
+                  activeQuestionId === q.id ? "text-secondary-dark" : "text-on-surface"
                 )}
               >
-                <span className="text-xs text-muted">Q{i + 1}</span>
+                <span className="text-xs text-on-surface-variant">Q{i + 1}</span>
                 <p className="mt-0.5 line-clamp-3">{q.question_text}</p>
                 {scoredQuestionIds.has(q.id) && (
-                  <span className="mt-1 inline-block text-xs text-brand-600">Scored</span>
+                  <span className="mt-1 inline-block text-xs text-secondary">Scored</span>
                 )}
               </button>
               <button
@@ -95,14 +95,14 @@ export function QuestionSidebar({
           ))}
         </div>
 
-        <div className="space-y-2 border-t border-border pt-3">
+        <div className="space-y-2 border-t border-outline-variant pt-3">
           <div className="flex gap-2">
             <input
               type="text"
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Your question"
-              className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2.5 text-sm min-h-[42px] placeholder:text-gray-400"
+              className="min-w-0 flex-1 rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm min-h-[42px] text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
               onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
             />
             <Button

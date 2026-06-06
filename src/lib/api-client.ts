@@ -86,6 +86,12 @@ export async function getSession(id: string): Promise<Session> {
   return apiFetch<Session>(`/api/sessions/${id}`);
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  return apiFetch<void>(`/api/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getSessionQuestions(
   sessionId: string
 ): Promise<Question[]> {

@@ -25,7 +25,7 @@ function highlightTranscript(transcript: string, changes: ScriptChange[]): React
     parts.push(
       <mark
         key={key++}
-        className="rounded-sm bg-gray-100 px-0.5 underline decoration-gray-400 decoration-dotted underline-offset-2"
+        className="rounded-sm bg-amber-100 px-0.5 text-amber-900"
         title={change.reason}
       >
         {remaining.slice(idx, idx + change.original.length)}
@@ -44,11 +44,16 @@ function highlightTranscript(transcript: string, changes: ScriptChange[]): React
 
 export function ScriptDisplay({ transcript, changes }: ScriptDisplayProps) {
   return (
-    <div className="rounded-xl border border-border bg-white px-5 py-4">
-      <h4 className="mb-2 text-sm font-medium text-gray-900">Your script</h4>
-      <p className="text-base leading-relaxed text-gray-800">
+    <div className="rounded-lg border border-outline-variant bg-surface-elevated px-5 py-4">
+      <h4 className="mb-2 text-sm font-semibold text-on-surface">Your script</h4>
+      <p className="text-base leading-relaxed text-on-surface">
         {highlightTranscript(transcript, changes)}
       </p>
+      {changes.length > 0 && (
+        <p className="mt-3 text-sm text-on-surface-variant">
+          Highlighted phrases have suggested improvements below.
+        </p>
+      )}
     </div>
   );
 }

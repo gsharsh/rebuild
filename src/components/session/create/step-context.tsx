@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { uploadResume } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/client";
-import { FileText, Upload, X } from "lucide-react";
+import { CheckCircle, CloudUpload, X } from "lucide-react";
 
 interface StepContextProps {
   context: string;
@@ -24,6 +24,7 @@ export function StepContext({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   async function handleFileSelect(file: File) {
     setUploading(true);
@@ -57,28 +58,34 @@ export function StepContext({
   }
 
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900">Add context</h2>
-      <p className="mt-1 text-sm text-muted">
-        Share background details or upload your resume to personalise coaching.
+    <section>
+      <h1 className="text-2xl font-semibold tracking-tight text-on-surface sm:text-3xl">
+        Provide more context
+      </h1>
+      <p className="mt-2 text-on-surface-variant">
+        Write about yourself or anything you&apos;d like to share so we can know you better.
       </p>
-      <div className="mt-6 space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Background context
+      <div className="mt-8 space-y-8">
+        <div className="flex flex-col gap-2">
+          <label
+            htmlFor="context"
+            className="text-xs font-semibold uppercase tracking-wider text-on-surface"
+          >
+            About You
           </label>
           <Textarea
+            id="context"
             value={context}
             onChange={(e) => onContextChange(e.target.value)}
-            placeholder="Your major, key projects, why you're applying, relevant experience…"
-            rows={6}
+            placeholder="Your background, projects, goals, or what you want the coach to know…"
+            rows={4}
           />
         </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Resume (optional)
-          </label>
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-on-surface">
+            Upload Resume / CV
+          </span>
           <input
             ref={fileRef}
             type="file"
@@ -90,31 +97,51 @@ export function StepContext({
             }}
           />
           {resumeUrl ? (
-            <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
-              <FileText className="h-5 w-5 text-brand-600" />
-              <span className="flex-1 truncate text-sm text-brand-800">
-                {fileName ?? "Resume uploaded"}
-              </span>
+            <div className="flex items-center gap-3 rounded-lg border border-secondary bg-surface-container-low px-4 py-4">
+              <CheckCircle className="h-8 w-8 shrink-0 text-success" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-on-surface">
+                  {fileName ?? "Resume uploaded"}
+                </p>
+                <p className="text-sm text-on-surface-variant">Uploaded successfully</p>
+              </div>
               <Button type="button" variant="ghost" size="sm" onClick={clearResume}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           ) : (
-            <Button
-              type="button"
-              variant="secondary"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => fileRef.current?.click()}
-              disabled={uploading}
+              onKeyDown={(e) => e.key === "Enter" && fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file) void handleFileSelect(file);
+              }}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 transition-colors ${
+                dragOver
+                  ? "border-secondary bg-surface-container-high"
+                  : "border-outline-variant bg-white hover:bg-surface-container-low"
+              }`}
             >
-              <Upload className="mr-2 h-4 w-4" />
-              {uploading ? "Uploading…" : "Upload resume"}
-            </Button>
+              <CloudUpload className="mb-4 h-10 w-10 text-outline-variant" />
+              <p className="text-sm font-semibold text-on-surface">
+                {uploading ? "Uploading…" : "Click to upload or drag and drop"}
+              </p>
+              <p className="mt-1 text-sm text-on-surface-variant">PDF, DOCX up to 10MB</p>
+            </div>
           )}
-          {uploadError && (
-            <p className="mt-2 text-sm text-red-600">{uploadError}</p>
-          )}
+          {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

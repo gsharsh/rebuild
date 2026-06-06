@@ -54,30 +54,32 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="mb-8 text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 font-semibold text-brand-700 text-lg"
+            className="inline-flex items-center gap-2 text-lg font-bold text-on-surface"
           >
             <Mic className="h-6 w-6" />
             SpeakReady
           </Link>
-          <p className="mt-2 text-sm text-muted">
+          <p className="mt-2 text-sm text-on-surface-variant">
             Sign in to your private rehearsal room
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">
+        <div className="rounded-lg border border-outline-variant bg-surface-elevated p-6 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-on-surface">
             {isSignUp ? "Create account" : "Welcome back"}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
               <div>
-                <label className="text-sm text-muted block mb-1">Name</label>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-on-surface">
+                  Name
+                </label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -86,7 +88,9 @@ export default function LoginPage() {
               </div>
             )}
             <div>
-              <label className="text-sm text-muted block mb-1">Email</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-on-surface">
+                Email
+              </label>
               <Input
                 type="email"
                 value={email}
@@ -96,7 +100,9 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-muted block mb-1">Password</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-on-surface">
+                Password
+              </label>
               <Input
                 type="password"
                 value={password}
@@ -108,12 +114,10 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                {error}
-              </p>
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
             )}
             {message && (
-              <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+              <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-success">
                 {message}
               </p>
             )}
@@ -127,7 +131,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-muted">
+          <p className="mt-4 text-center text-sm text-on-surface-variant">
             {isSignUp ? "Already have an account?" : "New here?"}{" "}
             <button
               type="button"
@@ -136,7 +140,7 @@ export default function LoginPage() {
                 setError("");
                 setMessage("");
               }}
-              className="text-brand-600 font-medium hover:underline"
+              className="font-medium text-secondary hover:underline"
             >
               {isSignUp ? "Sign in" : "Create account"}
             </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { OutputCard } from "@/components/ui/output-card";
@@ -10,6 +10,14 @@ import { transcribeAudioFile } from "@/lib/elevenlabs-client";
 import { DEMO_ANSWER, DEMO_ANALYZE_RESPONSE } from "@/lib/demo-data";
 import type { AnalyzeResponse, AnswerMode } from "@/lib/api-types";
 import { Mic, Square, Upload, Video, FlaskConical } from "lucide-react";
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
 
 interface PractisePanelProps {
   sessionId: string;
@@ -30,6 +38,7 @@ export function PractisePanel({
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState("");
   const [postureData, setPostureData] = useState<PostureResult | null>(null);
 
@@ -37,6 +46,17 @@ export function PractisePanel({
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const videoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!recording) {
+      setElapsedSec(0);
+      return;
+    }
+    const tick = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }, 250);
+    return () => clearInterval(tick);
+  }, [recording]);
 
   const modes: { id: AnswerMode; label: string }[] = [
     { id: "audio", label: "Speak" },
@@ -164,7 +184,7 @@ export function PractisePanel({
         </Button>
       }
     >
-      <p className="mb-5 text-xl font-medium leading-snug text-gray-900">{questionText}</p>
+      <p className="mb-5 text-xl font-medium leading-snug text-on-surface">{questionText}</p>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {modes.map((m) => (
@@ -174,8 +194,8 @@ export function PractisePanel({
             onClick={() => setMode(m.id)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               mode === m.id
-                ? "bg-brand-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "bg-secondary text-white"
+                : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
             }`}
           >
             {m.label}
@@ -204,29 +224,60 @@ export function PractisePanel({
       )}
 
       {mode === "audio" && (
-        <div className="space-y-4 py-6 text-center">
-          <p className="text-sm text-muted">
-            Record your answer. Native language is fine.
-          </p>
+        <div className="flex flex-col items-center py-8 text-center">
+          {recording && (
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-outline-variant bg-white px-4 py-1.5">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-on-surface">
+                Live recording
+              </span>
+            </div>
+          )}
+
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-2xl bg-surface-container-low">
+            <Mic className="h-10 w-10 text-secondary" />
+          </div>
+
           {recording ? (
-            <Button variant="danger" onClick={stopRecording}>
-              <Square className="mr-2 h-4 w-4" />
-              Stop recording
-            </Button>
+            <p className="mb-6 text-2xl font-semibold tabular-nums text-on-surface">
+              {formatTime(elapsedSec)}
+            </p>
+          ) : loading ? (
+            <p className="mb-6 text-sm text-on-surface-variant">
+              Transcribing and analyzing…
+            </p>
           ) : (
-            <Button onClick={startRecording} disabled={loading}>
-              <Mic className="mr-2 h-4 w-4" />
+            <p className="mb-6 text-sm text-on-surface-variant">
+              Record your answer. Native language is fine.
+            </p>
+          )}
+
+          {recording ? (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="inline-flex w-full max-w-xs items-center justify-center gap-3 rounded-xl bg-red-700 px-6 py-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:scale-[0.98]"
+            >
+              <Square className="h-4 w-4 fill-current" />
+              End practice session
+            </button>
+          ) : (
+            <Button
+              onClick={startRecording}
+              disabled={loading}
+              className="w-full max-w-xs gap-2 py-3"
+            >
+              <Mic className="h-4 w-4" />
               Start recording
             </Button>
           )}
-          {loading && <p className="text-sm text-muted">Transcribing and analyzing…</p>}
         </div>
       )}
 
       {mode === "video" && (
         <div className="space-y-4 py-2 text-center">
           <PostureAnalyzer onResult={setPostureData} />
-          <p className="text-sm text-muted">
+          <p className="text-sm text-on-surface-variant">
             Upload a practice video for speech and posture coaching.
           </p>
           <input
@@ -243,7 +294,7 @@ export function PractisePanel({
             <Upload className="mr-2 h-4 w-4" />
             {loading ? "Analyzing…" : "Upload video"}
           </Button>
-          <div className="flex items-center justify-center gap-2 text-xs text-muted">
+          <div className="flex items-center justify-center gap-2 text-xs text-on-surface-variant">
             <Video className="h-3 w-3" />
             Optional — posture signals when camera data is available
           </div>

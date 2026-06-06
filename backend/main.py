@@ -5,11 +5,11 @@ from typing import Any, Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import types
-from google.genai.errors import ServerError
+from google.genai.errors import ClientError, ServerError
 from pydantic import BaseModel
 from supabase import Client, create_client
 
@@ -98,19 +98,63 @@ def safe_json(text: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
-def fallback_script(text: str) -> dict[str, Any]:
+def _word_cap(text: str, max_words: int) -> str:
+    words = str(text).split()
+    if len(words) <= max_words:
+        return str(text).strip()
+    return " ".join(words[:max_words]).strip() + "…"
+
+
+def trim_coaching_output(parsed: dict[str, Any]) -> dict[str, Any]:
+    if parsed.get("coaching_lesson"):
+        parsed["coaching_lesson"] = _word_cap(parsed["coaching_lesson"], 20)
+    if parsed.get("improved_script"):
+        parsed["improved_script"] = _word_cap(parsed["improved_script"], 90)
+    trimmed_changes = []
+    for change in (parsed.get("changes_made") or [])[:3]:
+        if not isinstance(change, dict):
+            continue
+        trimmed_changes.append(
+            {
+                "original": _word_cap(change.get("original", ""), 12),
+                "fixed": _word_cap(change.get("fixed", ""), 12),
+                "reason": _word_cap(change.get("reason", ""), 12),
+            }
+        )
+    parsed["changes_made"] = trimmed_changes
+    words = parsed.get("words_to_practice") or []
+    if isinstance(words, list):
+        parsed["words_to_practice"] = [str(w) for w in words[:2]]
+    return parsed
+
+
+def fallback_script(text: str, reason: str = "AI coaching is temporarily unavailable.") -> dict[str, Any]:
     return {
         "improved_script": text,
         "changes_made": [
             {
                 "original": text[:120],
                 "fixed": text[:120],
-                "reason": "Demo fallback kept your original answer because AI coaching was unavailable.",
+                "reason": reason,
             }
         ],
         "coaching_lesson": "Open with a direct answer, use shorter sentences, and connect your example back to the opportunity.",
         "words_to_practice": [],
+        "coaching_fallback": True,
     }
+
+
+def generate_script_analysis(model: str, user_prompt: str, config: types.GenerateContentConfig) -> dict[str, Any]:
+    response = gemini_client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config=config,
+    )
+    if response and response.text:
+        parsed = trim_coaching_output(safe_json(response.text))
+        parsed["coaching_fallback"] = False
+        return parsed
+    raise ValueError("Empty model response")
 
 
 def analyze_script(
@@ -135,7 +179,7 @@ INTERVIEW DATA:
 - Question Asked: {question}
 - Student's Raw Input/Draft: {user_response}
 
-Analyze this response. Refine its structural clarity, optimize it for a spoken interview rehearsal, and output data matching the requested layout constraints.
+Analyze this response. Keep all output concise and scannable — short enough to read in under 30 seconds.
 """
 
     system_instruction = """
@@ -143,24 +187,30 @@ You are the elite AI Script Coach for 'SpeakReady', an interview rehearsal platf
 
 CRITICAL PROCESSING RULES:
 1. PRESERVE THE INITIAL CAPABILITY: Do not convert the speech into an impersonal corporate template. Retain personal anecdotes, technical specificity, and original character traits.
-2. OPTIMIZE FOR ORAL COMPREHENSION: Convert winding, long compound sentences into brief, impactful expressions. Multi-clause groupings create breath gaps and increase stutter risks for non-native speakers under stress.
-3. INSTRUCTIONAL ANALYSIS: Return a clear, encouraging analysis detailing WHY updates were made so the user builds structural intuition over time.
-4. TARGET PRACTICE ARRAYS: Isolate 2-3 specific technical or multi-syllabic terms from the updated response that require deliberate articulation pacing.
+2. OPTIMIZE FOR ORAL COMPREHENSION: Use short sentences. Cut filler and hedging. The improved script should sound natural when spoken aloud in under 60 seconds.
+3. BE BRIEF: Students read this on a phone. No long paragraphs. No repeating the same advice in multiple fields.
+4. TARGET PRACTICE ARRAYS: Pick at most 2 technical or multi-syllabic terms worth practising.
 
 Never frame feedback as accent fixing, bad English, or poor English. Use supportive language about clearer delivery, confidence coaching, and interview readiness.
 
+LENGTH LIMITS (strict):
+- improved_script: 3–5 short sentences, max ~90 words total.
+- changes_made: 2–3 items only. Each "original" and "fixed" snippet max 12 words. Each "reason" max 12 words.
+- coaching_lesson: exactly 1 sentence, max 20 words.
+- words_to_practice: 1–2 words only.
+
 You MUST respond strictly in the following JSON schema representation without markdown tags or wrapped text:
 {
-  "improved_script": "The complete polished text optimized for spoken delivery.",
+  "improved_script": "Concise polished text for spoken delivery.",
   "changes_made": [
     {
-      "original": "The string section extracted from the input text prior to parsing.",
-      "fixed": "The targeted correction replacement.",
-      "reason": "Clear explanation linking the change to breathing cadence or delivery impact."
+      "original": "Short excerpt from input.",
+      "fixed": "Short replacement.",
+      "reason": "Brief why, max 12 words."
     }
   ],
-  "coaching_lesson": "A supportive 2-sentence summary detailing structural patterns used to enhance this specific text block.",
-  "words_to_practice": ["word1", "word2"]
+  "coaching_lesson": "One short sentence.",
+  "words_to_practice": ["word1"]
 }
 """
 
@@ -170,35 +220,36 @@ You MUST respond strictly in the following JSON schema representation without ma
         temperature=0.3,
     )
 
+    models = ("gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash")
     retry_delay = 2
-    for attempt in range(3):
-        try:
-            response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=user_prompt,
-                config=config,
-            )
-            if response and response.text:
-                return safe_json(response.text)
-        except ServerError:
-            if attempt < 2:
-                time.sleep(retry_delay)
-                retry_delay *= 2
-            else:
-                try:
-                    response = gemini_client.models.generate_content(
-                        model="gemini-2.5-flash-lite",
-                        contents=user_prompt,
-                        config=config,
-                    )
-                    if response and response.text:
-                        return safe_json(response.text)
-                except Exception:
-                    pass
-        except Exception:
-            break
+    last_error = "AI coaching is temporarily unavailable."
 
-    return fallback_script(user_response)
+    for model in models:
+        for attempt in range(3):
+            try:
+                return generate_script_analysis(model, user_prompt, config)
+            except ServerError:
+                if attempt < 2:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+            except ClientError as exc:
+                last_error = str(exc)
+                if exc.status_code == 429 and attempt < 2:
+                    time.sleep(35)
+                    continue
+                break
+            except Exception as exc:
+                last_error = str(exc)
+                break
+
+    if "429" in last_error or "quota" in last_error.lower():
+        reason = "Gemini quota reached — coaching resets when your daily limit refreshes."
+    elif not gemini_client:
+        reason = "GEMINI_API_KEY is not configured on the backend."
+    else:
+        reason = "AI coaching failed — try again in a moment."
+
+    return fallback_script(user_response, reason=reason)
 
 
 def script_context_from_session(session: dict[str, Any]) -> dict[str, str]:
@@ -410,6 +461,32 @@ async def get_sessions(user_id: str = Depends(get_current_user_id)):
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: UUID, user_id: str = Depends(get_current_user_id)):
     return owned_session(str(session_id), user_id)
+
+
+@app.delete("/api/sessions/{session_id}", status_code=204)
+async def delete_session(
+    session_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    owned_session(str(session_id), user_id)
+    sid = str(session_id)
+    try:
+        questions = (
+            supabase_admin.table("questions").select("id").eq("session_id", sid).execute()
+        )
+        for row in questions.data or []:
+            supabase_admin.table("answers").delete().eq("question_id", row["id"]).execute()
+        supabase_admin.table("answers").delete().eq("session_id", sid).execute()
+        supabase_admin.table("questions").delete().eq("session_id", sid).execute()
+        supabase_admin.table("sessions").delete().eq("id", sid).execute()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not delete session: {exc}",
+        ) from exc
+    return Response(status_code=204)
 
 
 @app.post("/api/questions", status_code=201)

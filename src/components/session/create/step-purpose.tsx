@@ -11,13 +11,34 @@ import {
   Rocket,
 } from "lucide-react";
 
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  "Job Interview": <Briefcase className="h-6 w-6" />,
-  "Visa Interview": <Globe className="h-6 w-6" />,
-  "College Interview": <GraduationCap className="h-6 w-6" />,
-  "Scholarship Interview": <Award className="h-6 w-6" />,
-  "Class Presentation": <Presentation className="h-6 w-6" />,
-  "Hackathon Pitch": <Rocket className="h-6 w-6" />,
+const TYPE_META: Record<
+  string,
+  { icon: React.ReactNode; description: string }
+> = {
+  "Job Interview": {
+    icon: <Briefcase className="h-8 w-8" />,
+    description: "Technical and behavioral rounds for corporate roles.",
+  },
+  "Visa Interview": {
+    icon: <Globe className="h-8 w-8" />,
+    description: "Consular questioning and documentation verification.",
+  },
+  "College Interview": {
+    icon: <GraduationCap className="h-8 w-8" />,
+    description: "Academic background and motivation discussions.",
+  },
+  "Scholarship Interview": {
+    icon: <Award className="h-8 w-8" />,
+    description: "Merit, goals, and financial need conversations.",
+  },
+  "Class Presentation": {
+    icon: <Presentation className="h-8 w-8" />,
+    description: "Structured delivery for academic presentations.",
+  },
+  "Hackathon Pitch": {
+    icon: <Rocket className="h-8 w-8" />,
+    description: "Fast-paced product and demo pitches.",
+  },
 };
 
 interface StepPurposeProps {
@@ -27,41 +48,45 @@ interface StepPurposeProps {
 
 export function StepPurpose({ value, onChange }: StepPurposeProps) {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900">What is this for?</h2>
-      <p className="mt-1 text-sm text-muted">
-        Choose the type of rehearsal that best matches your opportunity.
+    <section>
+      <h1 className="text-2xl font-semibold tracking-tight text-on-surface sm:text-3xl">
+        What is this rehearsal for?
+      </h1>
+      <p className="mt-2 text-on-surface-variant">
+        Select the scenario you want to practice.
       </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {INTERVIEW_TYPES.map((type) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => onChange(type)}
-            className={cn(
-              "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-              value === type
-                ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
-                : "border-border bg-white hover:border-brand-300 hover:bg-brand-50/50"
-            )}
-          >
-            <span
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {INTERVIEW_TYPES.map((type) => {
+          const meta = TYPE_META[type];
+          const selected = value === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onChange(type)}
               className={cn(
-                "rounded-lg p-2",
-                value === type ? "bg-brand-600 text-white" : "bg-gray-100 text-brand-700"
+                "rounded-lg border p-6 text-left transition-all",
+                selected
+                  ? "border-secondary bg-surface-container-low"
+                  : "border-outline-variant bg-surface-elevated hover:border-secondary"
               )}
             >
-              {TYPE_ICONS[type]}
-            </span>
-            <div>
-              <p className="font-medium text-gray-900">{type}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                Tailored coaching for this scenario
+              <span
+                className={cn(
+                  "mb-4 block text-secondary",
+                  selected && "text-secondary-dark"
+                )}
+              >
+                {meta.icon}
+              </span>
+              <h3 className="text-base font-semibold text-on-surface">{type}</h3>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                {meta.description}
               </p>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </section>
   );
 }

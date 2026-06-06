@@ -27,6 +27,8 @@ export interface ScriptAnalysis {
   improved_script: string;
   changes_made: ScriptChange[];
   coaching_lesson: string;
+  words_to_practice?: string[];
+  coaching_fallback?: boolean;
 }
 
 export interface SpeechAnalysis {

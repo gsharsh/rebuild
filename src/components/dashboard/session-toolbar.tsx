@@ -20,7 +20,7 @@ export function SessionToolbar({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
@@ -29,11 +29,11 @@ export function SessionToolbar({
         />
       </div>
       <div className="relative w-full sm:w-52">
-        <SlidersHorizontal className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
+        <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
         <select
           value={filterType}
           onChange={(e) => onFilterChange(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-border bg-white py-2 pl-9 pr-8 text-sm"
+          className="w-full appearance-none rounded-lg border border-outline-variant bg-surface-elevated py-3 pl-9 pr-8 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
         >
           <option value="">All types</option>
           {INTERVIEW_TYPES.map((t) => (

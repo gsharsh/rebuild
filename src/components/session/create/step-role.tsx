@@ -16,35 +16,45 @@ export function StepRole({
   onOrganisationChange,
 }: StepRoleProps) {
   return (
-    <div>
-      <h2 className="text-lg font-semibold text-gray-900">Role & organisation</h2>
-      <p className="mt-1 text-sm text-muted">
-        Tell us what you&apos;re preparing for so questions feel realistic.
+    <section>
+      <h1 className="text-2xl font-semibold tracking-tight text-on-surface sm:text-3xl">
+        Define your target
+      </h1>
+      <p className="mt-2 text-on-surface-variant">
+        Role and organisation are required.
       </p>
-      <div className="mt-6 space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Role <span className="text-red-500">*</span>
+      <div className="mt-8 space-y-6">
+        <div className="flex flex-col gap-2">
+          <label
+            htmlFor="role"
+            className="text-xs font-semibold uppercase tracking-wider text-on-surface"
+          >
+            Target Role / Position *
           </label>
           <Input
+            id="role"
             value={role}
             onChange={(e) => onRoleChange(e.target.value)}
-            placeholder="e.g. Software Engineering Intern"
+            placeholder="e.g. Senior Product Designer"
             required
           />
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Organisation <span className="text-red-500">*</span>
+        <div className="flex flex-col gap-2">
+          <label
+            htmlFor="org"
+            className="text-xs font-semibold uppercase tracking-wider text-on-surface"
+          >
+            Organization / Agency *
           </label>
           <Input
+            id="org"
             value={organisation}
             onChange={(e) => onOrganisationChange(e.target.value)}
-            placeholder="e.g. Google, MIT, US Embassy"
+            placeholder="e.g. Acme Corp"
             required
           />
         </div>
       </div>
-    </div>
+    </section>
   );
 }
